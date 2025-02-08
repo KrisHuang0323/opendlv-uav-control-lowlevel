@@ -362,3 +362,12 @@ message opendlv.logic.cognition.GroundMotionLimit [id = 1191] {
   float pitchRate [id = 5];
   float yawRate [id = 6];
 }
+
+message opendlv.logic.action.CrazyFlieCommand [id = 1192] {
+  float x [id = 1];
+  float y [id = 2];
+  float z [id = 3];
+  float yaw [id = 4];
+  float height [id = 5];
+  float time [id = 6];
+}

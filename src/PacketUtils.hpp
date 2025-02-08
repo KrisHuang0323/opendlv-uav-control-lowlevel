@@ -5,9 +5,9 @@ class PacketUtils
 {
 public:
     // Constructs a high level commander goto packet
-    static bitcraze::crazyflieLinkCpp::Packet gotoCommand(float x, float y, float z, float yaw, float time) {
-        const uint8_t size = 25;
-        std::array<uint8_t, size> buffer;
+    // const uint8_t gotoSize = 25;
+    static std::array<uint8_t, 25> gotoCommand(float x, float y, float z, float yaw, float time) {
+        std::array<uint8_t, 25> buffer;
         buffer[0] = 0xFF;
         uint8_t index = 1;
         index += pack(buffer.data(), index, (uint8_t)12);    // Command (Goto = 12)
@@ -19,16 +19,13 @@ public:
         index += pack(buffer.data(), index, z);             // z
         index += pack(buffer.data(), index, yaw);           // Yaw
         index += pack(buffer.data(), index, time);          // Duration (seconds)
-        
-        bitcraze::crazyflieLinkCpp::Packet packet(buffer.data(), size);
-        packet.setPort((uint8_t)0x08);          // PORT 8 = HIGH_LEVEL_COMMANDER
-        return packet;
+        return buffer;
     }
 
     // Constructs a high level commander takeoff packet
-    static bitcraze::crazyflieLinkCpp::Packet takeoffCommand(float height, float yaw, float time) {
-        const uint8_t size = 16;
-        std::array<uint8_t, size> buffer;
+    // const uint8_t takeoffSize = 16;
+    static std::array<uint8_t, 16> takeoffCommand(float height, float yaw, float time) {
+        std::array<uint8_t, 16> buffer;
         buffer[0] = 0xFF;
         uint8_t index = 1;
         index += pack(buffer.data(), index, (uint8_t)7);    // Command (Takeoff = 7)
@@ -37,16 +34,13 @@ public:
         index += pack(buffer.data(), index, yaw);           // Yaw
         index += pack(buffer.data(), index, true);          // Use Current Yaw
         index += pack(buffer.data(), index, time);          // Duration (seconds)
-        
-        bitcraze::crazyflieLinkCpp::Packet packet(buffer.data(), size);
-        packet.setPort((uint8_t)0x08);          // PORT 8 = HIGH_LEVEL_COMMANDER
-        return packet;
+        return buffer;
     }
 
     // Constructs a high level commander land packet
-    static bitcraze::crazyflieLinkCpp::Packet landCommand(float height, float yaw, float time) {
-        const uint8_t size = 16;
-        std::array<uint8_t, size> buffer;
+    // const uint8_t landSize = 16;
+    static std::array<uint8_t, 16> landCommand(float height, float yaw, float time) {
+        std::array<uint8_t, 16> buffer;
         buffer[0] = 0xFF;
         uint8_t index = 1;
         index += pack(buffer.data(), index, (uint8_t)8);    // Command (Land = 8)
@@ -55,24 +49,18 @@ public:
         index += pack(buffer.data(), index, yaw);           // Yaw
         index += pack(buffer.data(), index, true);          // Use Current Yaw
         index += pack(buffer.data(), index, time);          // Duration (seconds)
-        
-        bitcraze::crazyflieLinkCpp::Packet packet(buffer.data(), size);
-        packet.setPort((uint8_t)0x08);          // PORT 8 = HIGH_LEVEL_COMMANDER
-        return packet;
+        return buffer;
     }
 
     // Constructs a high level commander stop packet
-    static bitcraze::crazyflieLinkCpp::Packet stopCommand() {
-        const uint8_t size = 3;
-        std::array<uint8_t, size> buffer;
+    // const uint8_t stopSize = 3;
+    static std::array<uint8_t, 3> stopCommand() {        
+        std::array<uint8_t, 3> buffer;
         buffer[0] = 0xFF;
         uint8_t index = 1;
         index += pack(buffer.data(), index, (uint8_t)3);    // Command (Stop = 3)
         index += pack(buffer.data(), index, (uint8_t)0);    // Group Mask (0 = all groups)
-
-        bitcraze::crazyflieLinkCpp::Packet packet(buffer.data(), size);
-        packet.setPort((uint8_t)0x08);          // PORT 8 = HIGH_LEVEL_COMMANDER
-        return packet;
+        return buffer;
     }
 
 private:

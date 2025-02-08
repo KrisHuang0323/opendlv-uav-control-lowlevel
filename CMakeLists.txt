@@ -81,31 +81,26 @@ if(UNIX)
 endif()
 
 # Find and include OpenCV
-find_package(OpenCV REQUIRED core highgui imgproc)
-include_directories(SYSTEM ${OpenCV_INCLUDE_DIRS})
-set(LIBRARIES ${LIBRARIES} ${OpenCV_LIBS})
+# find_package(OpenCV REQUIRED core highgui imgproc)
+# include_directories(SYSTEM ${OpenCV_INCLUDE_DIRS})
+# set(LIBRARIES ${LIBRARIES} ${OpenCV_LIBS})
 
 # Add crazyflie_lib_cpp as sub-directory
-add_subdirectory(crazyflie-lib-cpp)
-target_compile_options(crazyflieLinkCpp PRIVATE -Wno-error=shadow)
+# add_subdirectory(crazyflie-lib-cpp)
+# target_compile_options(crazyflieLinkCpp PRIVATE -Wno-error=shadow)
 # target_compile_options(crazyflieLinkCpp PRIVATE -Wno-error=effc++)
 
 # Tell the compiler what executable we want, and what libraries to link
 add_executable(${PROJECT_NAME}
-  # ${CMAKE_CURRENT_SOURCE_DIR}/src/${PROJECT_NAME}.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/${PROJECT_NAME}.cpp
   ${CMAKE_BINARY_DIR}/opendlv-standard-message-set.hpp
   ${CMAKE_BINARY_DIR}/cluon-complete.hpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/test_include.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/broadcast.cpp
+  # ${CMAKE_CURRENT_SOURCE_DIR}/src/test_include.cpp
+  # ${CMAKE_CURRENT_SOURCE_DIR}/src/broadcast.cpp
   # ${CMAKE_CURRENT_SOURCE_DIR}/src/crazyflieLog.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/PacketUtils.hpp)
-# target_include_directories(crazyflieLinkCpp PUBLIC
-#   ${CMAKE_CURRENT_SOURCE_DIR}/crazyflie-lib-cpp/crazyflie-link-cpp/include
-# )
-# target_include_directories(crazyflieLibCpp PUBLIC
-#   ${CMAKE_CURRENT_SOURCE_DIR}/crazyflie-lib-cpp/include
-# )
-target_link_libraries(${PROJECT_NAME} ${LIBRARIES} crazyflieLibCpp)
+  # ${CMAKE_CURRENT_SOURCE_DIR}/src/PacketUtils.hpp
+  )
+target_link_libraries(${PROJECT_NAME} ${LIBRARIES})
 
 # Tell how the app is installed after compilation (the executable is copied to 'bin'
 install(TARGETS ${PROJECT_NAME} DESTINATION bin COMPONENT ${PROJECT_NAME})
