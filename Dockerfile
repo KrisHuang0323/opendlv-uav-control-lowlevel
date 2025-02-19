@@ -53,4 +53,4 @@ RUN apt-get install -y \
 
 WORKDIR /usr/bin
 COPY --from=builder /tmp/dest /usr
-ENTRYPOINT ["/usr/bin/opendlv-perception-helloworld"]
+ENTRYPOINT ["/usr/bin/opendlv-uav-control-lowlevel"]
