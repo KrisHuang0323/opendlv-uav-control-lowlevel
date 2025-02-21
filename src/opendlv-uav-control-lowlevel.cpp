@@ -37,9 +37,10 @@ void Takeoff(cluon::OD4Session &od4, float height, float duration){
     cfcommand.height(height);
     cfcommand.time(duration);
     od4.send(cfcommand, sampleTime, 0);
+    std::this_thread::sleep_for(std::chrono::seconds(duration + 0.5));
 }
 
-void Goto(cluon::OD4Session &od4, float x, float y, float z, float yaw, float duration){
+void Goto(cluon::OD4Session &od4, float x, float y, float z, float yaw, float duration, bool isdelay = false){
     std::cout << "Go to position : x: "<< x << " ,y: " << y << " ,z: " << z << " , yaw: " << yaw << std::endl;
     cluon::data::TimeStamp sampleTime;
     opendlv::logic::action::CrazyFlieCommand cfcommand;
@@ -49,6 +50,9 @@ void Goto(cluon::OD4Session &od4, float x, float y, float z, float yaw, float du
     cfcommand.yaw(yaw);
     cfcommand.time(duration);
     od4.send(cfcommand, sampleTime, 3);
+    if ( isdelay ){
+        std::this_thread::sleep_for(std::chrono::seconds(duration + 0.5));
+    }
 }
 
 void Landing(cluon::OD4Session &od4, float height, float duration){
@@ -58,6 +62,7 @@ void Landing(cluon::OD4Session &od4, float height, float duration){
     cfcommand.height(height);
     cfcommand.time(duration);
     od4.send(cfcommand, sampleTime, 1);
+    std::this_thread::sleep_for(std::chrono::seconds(duration + 0.5));
 }
 
 void Stopping(cluon::OD4Session &od4){
@@ -65,6 +70,7 @@ void Stopping(cluon::OD4Session &od4){
     cluon::data::TimeStamp sampleTime;
     opendlv::logic::action::CrazyFlieCommand cfcommand;
     od4.send(cfcommand, sampleTime, 2);
+    std::this_thread::sleep_for(std::chrono::seconds(duration + 0.5));
 }
 
 /*
@@ -110,6 +116,39 @@ int32_t main(int32_t argc, char **argv) {
     // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
     od4.dataTrigger(opendlv::proxy::DistanceReading::ID(), onDistance);
 
+    // Handler to receive state readings (realized as C++ lambda).
+    // struct State {
+    //     float x;
+    //     float y;
+    //     float z;
+    //     float yaw;
+    // };
+    // std::mutex stateMutex;
+    // State interval_state{0.0f, 0.0f, 0.0f, 0.0f};
+    // State sofar_state{0.0f, 0.0f, 0.0f, 0.0f};
+    // float dist_interval{0.0f};
+    // float battery_state{0.0f};
+    // auto onStateRead = [&stateMutex, &interval_state, &sofar_state
+    //                    , &dist_interval, &battery_state](cluon::data::Envelope &&env){
+    //     auto senderStamp = env.senderStamp();
+    //     // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
+    //     opendlv::logic::sensation::CrazyFlieState cfState = cluon::extractMessage<opendlv::logic::sensation::CrazyFlieState>(std::move(env));
+    //     // Store distance readings.
+    //     std::lock_guard<std::mutex> lck(stateMutex);
+    //     interval_state.x = cfState.x_interval;
+    //     interval_state.y = cfState.y_interval;
+    //     interval_state.z = cfState.z_interval;
+    //     interval_state.yaw = cfState.yaw_interval;
+    //     dist_interval = cfState.dist_interval;
+    //     sofar_state.x = cfState.x_so_far;
+    //     sofar_state.y = cfState.y_so_far;
+    //     sofar_state.z = cfState.z_so_far;
+    //     sofar_state.yaw = cfState.yaw_so_far;
+    //     battery_state = cfState.battery_state;
+    // };
+    // // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
+    // od4.dataTrigger(opendlv::logic::sensation::CrazyFlieState::ID(), onStateRead);
+
     // Endless loop; end the program by pressing Ctrl-C.
     float safe_dist = 0.5f;
     float front_looking_dist = 0.5f;
@@ -126,7 +165,7 @@ int32_t main(int32_t argc, char **argv) {
 
         // Takeoff first
         if ( hasTakeoff == false ){
-            Takeoff(od4, 0.5f, 1.0f);
+            Takeoff(od4, 0.5f, 3.0f);
             hasTakeoff = true;
         }
 
