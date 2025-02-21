@@ -30,17 +30,17 @@
 #include <cmath>
 
 
-void Takeoff(cluon::OD4Session &od4, float height, float duration){
+void Takeoff(cluon::OD4Session &od4, float height, int duration){
     std::cout << "Taking off to height: " << height << std::endl;        
     cluon::data::TimeStamp sampleTime;
     opendlv::logic::action::CrazyFlieCommand cfcommand;
     cfcommand.height(height);
     cfcommand.time(duration);
     od4.send(cfcommand, sampleTime, 0);
-    std::this_thread::sleep_for(std::chrono::seconds(duration + 0.5));
+    std::this_thread::sleep_for(std::chrono::milliseconds(duration*1000 + 500));
 }
 
-void Goto(cluon::OD4Session &od4, float x, float y, float z, float yaw, float duration, bool isdelay = false){
+void Goto(cluon::OD4Session &od4, float x, float y, float z, float yaw, int duration, bool isdelay = false){
     std::cout << "Go to position : x: "<< x << " ,y: " << y << " ,z: " << z << " , yaw: " << yaw << std::endl;
     cluon::data::TimeStamp sampleTime;
     opendlv::logic::action::CrazyFlieCommand cfcommand;
@@ -51,18 +51,18 @@ void Goto(cluon::OD4Session &od4, float x, float y, float z, float yaw, float du
     cfcommand.time(duration);
     od4.send(cfcommand, sampleTime, 3);
     if ( isdelay ){
-        std::this_thread::sleep_for(std::chrono::seconds(duration + 0.5));
+        std::this_thread::sleep_for(std::chrono::milliseconds(duration*1000 + 500));
     }
 }
 
-void Landing(cluon::OD4Session &od4, float height, float duration){
+void Landing(cluon::OD4Session &od4, float height, int duration){
     std::cout << "Landing to height: " << height << std::endl;
     cluon::data::TimeStamp sampleTime;
     opendlv::logic::action::CrazyFlieCommand cfcommand;
     cfcommand.height(height);
     cfcommand.time(duration);
     od4.send(cfcommand, sampleTime, 1);
-    std::this_thread::sleep_for(std::chrono::seconds(duration + 0.5));
+    std::this_thread::sleep_for(std::chrono::milliseconds(duration*1000 + 500));
 }
 
 void Stopping(cluon::OD4Session &od4){
@@ -70,7 +70,7 @@ void Stopping(cluon::OD4Session &od4){
     cluon::data::TimeStamp sampleTime;
     opendlv::logic::action::CrazyFlieCommand cfcommand;
     od4.send(cfcommand, sampleTime, 2);
-    std::this_thread::sleep_for(std::chrono::seconds(duration + 0.5));
+    std::this_thread::sleep_for(std::chrono::milliseconds(3000));
 }
 
 /*
@@ -165,9 +165,10 @@ int32_t main(int32_t argc, char **argv) {
 
         // Takeoff first
         if ( hasTakeoff == false ){
-            Takeoff(od4, 0.5f, 3.0f);
+            Takeoff(od4, 1.0f, 3);
             hasTakeoff = true;
         }
+        // std::this_thread::sleep_for(std::chrono::milliseconds(10000));
 
         /*
             Obstacle avoidance
@@ -179,11 +180,11 @@ int32_t main(int32_t argc, char **argv) {
             float dist = 0.1f;
             if ( left <= safe_dist ){
                 // Move right
-                Goto(od4, 0.0f, -dist, 0.0f, 0.0f, 3.0f);
+                Goto(od4, 0.0f, -dist, 0.0f, 0.0f, 3);
             }
             else if ( right <= safe_dist ){
                 // Move left
-                Goto(od4, 0.0f, dist, 0.0f, 0.0f, 3.0f);
+                Goto(od4, 0.0f, dist, 0.0f, 0.0f, 3);
             }
             continue;
         }
@@ -205,7 +206,7 @@ int32_t main(int32_t argc, char **argv) {
        // If the front is larger than the safe dist and the turning mode is off, move to the destination
        if ( front > safe_dist && Turning_mode == false ){
             float dist_to_move = 0.1f;
-            Goto(od4, dist_to_move, 0.0f, 0.0f, 0.0f, 1.0f);
+            Goto(od4, dist_to_move, 0.0f, 0.0f, 0.0f, 1);
             dist_moved += dist_to_move;
             Timer += 1;
             continue;
@@ -239,7 +240,7 @@ int32_t main(int32_t argc, char **argv) {
         if ( front <= front_looking_dist ){
             // Turn around to see whether somewhere can go
             float angle = 5.0f / 180.0f * M_PI;
-            Goto(od4, 0.0f, 0.0f, 0.0f, angle, 1.0f);
+            Goto(od4, 0.0f, 0.0f, 0.0f, angle, 1);
             angle_moved += angle;
         }
         else{
