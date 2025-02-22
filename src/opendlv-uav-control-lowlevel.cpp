@@ -137,7 +137,7 @@ int32_t main(int32_t argc, char **argv) {
 
     // Endless loop; end the program by pressing Ctrl-C.
     float safe_dist = 0.5f;
-    float front_looking_dist = 0.5f;
+    float front_looking_dist = 2.0f;
     float dist_moved = 0.0f;
     float dist_moved_so_far = 0.0f;
     float angle_moved = 0.0f;
