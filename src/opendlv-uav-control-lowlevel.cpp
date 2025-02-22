@@ -117,37 +117,23 @@ int32_t main(int32_t argc, char **argv) {
     od4.dataTrigger(opendlv::proxy::DistanceReading::ID(), onDistance);
 
     // Handler to receive state readings (realized as C++ lambda).
-    // struct State {
-    //     float x;
-    //     float y;
-    //     float z;
-    //     float yaw;
-    // };
-    // std::mutex stateMutex;
-    // State interval_state{0.0f, 0.0f, 0.0f, 0.0f};
-    // State sofar_state{0.0f, 0.0f, 0.0f, 0.0f};
-    // float dist_interval{0.0f};
-    // float battery_state{0.0f};
-    // auto onStateRead = [&stateMutex, &interval_state, &sofar_state
-    //                    , &dist_interval, &battery_state](cluon::data::Envelope &&env){
-    //     auto senderStamp = env.senderStamp();
-    //     // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
-    //     opendlv::logic::sensation::CrazyFlieState cfState = cluon::extractMessage<opendlv::logic::sensation::CrazyFlieState>(std::move(env));
-    //     // Store distance readings.
-    //     std::lock_guard<std::mutex> lck(stateMutex);
-    //     interval_state.x = cfState.x_interval;
-    //     interval_state.y = cfState.y_interval;
-    //     interval_state.z = cfState.z_interval;
-    //     interval_state.yaw = cfState.yaw_interval;
-    //     dist_interval = cfState.dist_interval;
-    //     sofar_state.x = cfState.x_so_far;
-    //     sofar_state.y = cfState.y_so_far;
-    //     sofar_state.z = cfState.z_so_far;
-    //     sofar_state.yaw = cfState.yaw_so_far;
-    //     battery_state = cfState.battery_state;
-    // };
-    // // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
-    // od4.dataTrigger(opendlv::logic::sensation::CrazyFlieState::ID(), onStateRead);
+    struct State {
+        float yaw;
+        float battery_state;
+    };
+    std::mutex stateMutex;
+    State cur_state{0.0f, 0.0f};
+    auto onStateRead = [&stateMutex, &cur_state](cluon::data::Envelope &&env){
+        auto senderStamp = env.senderStamp();
+        // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
+        opendlv::logic::sensation::CrazyFlieState cfState = cluon::extractMessage<opendlv::logic::sensation::CrazyFlieState>(std::move(env));
+        // Store distance readings.
+        std::lock_guard<std::mutex> lck(stateMutex);
+        cur_state.yaw = cfState.cur_yaw();
+        cur_state.battery_state = cfState.battery_state();
+    };
+    // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
+    od4.dataTrigger(opendlv::logic::sensation::CrazyFlieState::ID(), onStateRead);
 
     // Endless loop; end the program by pressing Ctrl-C.
     float safe_dist = 0.5f;
@@ -159,50 +145,167 @@ int32_t main(int32_t argc, char **argv) {
     int timer_max = 1000;
     bool Turning_mode = false;
     bool hasTakeoff = false;
+    bool hasClearPath = false;
+    bool is_Goto_started = false;
+    bool is_looking_around_started = false;
+    float current_front = 0.0f;
+    float ori_angle = 0.0f;
+    float current_angle = 0.0f;
+    float current_angle_dev = 0.0f;
+    int looking_around_timer = 0;
+    bool hasFront = false;
+    bool FoundFront = false;
+    bool is_record_ori_angle = false;
+    std::vector<std::pair<float, float>> angle_dev_vec;
+    std::vector<std::pair<float, float>> angle_dev_candidate_vec;
     while (od4.isRunning()) {
         // Sleep for 100 ms to not let the loop run to fast
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-        // Takeoff first
-        if ( hasTakeoff == false ){
+        /*
+            Takeoff
+            - Do it before start any goto action
+        */
+        if ( hasTakeoff == false && cur_state.battery_state > 3.6f ){
             Takeoff(od4, 1.0f, 3);
             hasTakeoff = true;
         }
-        // std::this_thread::sleep_for(std::chrono::milliseconds(10000));
 
         /*
             Obstacle avoidance
+            - Check that whether there are purple balls occur in the vision
+            - Dodge the ball according to the ball's movement
         */
-        // Check that whether the crazyflie is too close to something
-        // If left and right less than 0.5 m
-        if ( left <= safe_dist || right <= safe_dist ){
-            // Move away from wall until left and right larger than 0.5
-            float dist = 0.1f;
-            if ( left <= safe_dist ){
-                // Move right
-                Goto(od4, 0.0f, -dist, 0.0f, 0.0f, 3);
-            }
-            else if ( right <= safe_dist ){
-                // Move left
-                Goto(od4, 0.0f, dist, 0.0f, 0.0f, 3);
-            }
-            continue;
-        }
+        // Turn off Goto_started and looking around started while some obstacles occur
 
-        // Check that whether there are purple balls occur in the vision
+
         /*
             Homing
-        */
+            - Check the battery status
+            - Go back to charging state while the status gets too low
+        */        
+        if ( cur_state.battery_state <= 3.6f ){   // Take from communication or state estimator
+            // Do Go back motion
+            
+            // Implement landing for now
+            if ( hasTakeoff ){
+                Landing(od4, 0.0f, 3);
+                Stopping(od4);
+                hasTakeoff = false;
+                continue;
+            }
+        }
 
         /*
             Target reaching
+            - Check that whether there has green ball as target
+            - If green ball exist, then crazyflie will go to it straightforwardly
         */
-        // Reset front looking dist while some target occur
+        // Turn off Goto_started and looking around started while some target occur
 
-        
         /*
-            Finding
+            Front reaching
+            - If path exist, move forward until the front dist less than some threshold
+            - After reaching it, do look around action to find target
         */
+        if ( hasClearPath ){
+            if ( is_Goto_started == false ){
+                Goto(od4, 3.0f, 0.0f, 0.0f, 0.0f, 10);
+                is_Goto_started = true;
+                continue;
+            }
+            else if ( front <= safe_dist ){
+                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 1, true);
+                is_Goto_started = false;
+                hasClearPath = false;
+            }
+        }
+
+        /*
+            Look around
+            - Turn around for 360 degree to see whether target exist
+            - In the mean time, record some possible front path to go to
+        */
+        if ( hasFront == false ){
+            if ( is_record_ori_angle == false ){
+                ori_angle = cur_state.yaw; // Taking from communication
+                is_record_ori_angle = true;
+            }
+
+            if ( is_looking_around_started == false ){
+                Goto(od4, 0.0f, 0.0f, 0.0f, M_PI, 10);
+                is_looking_around_started = true;
+            }
+
+            current_angle = cur_state.yaw; // Taking from communication
+            angle_dev_vec.insert(angle_dev_vec.begin(),{front,std::abs( current_angle - ori_angle ) });
+            if ( front >= front_looking_dist ){
+                angle_dev_candidate_vec.insert(angle_dev_candidate_vec.begin(),{front,std::abs( current_angle - ori_angle ) });
+            }
+
+            // Check whether to end the looking around motion
+            if ( std::abs( current_angle - ori_angle ) >= M_PI - 1 / 180.0f * M_PI ){
+                if ( angle_dev_candidate_vec.size() <= 0 ){
+                    if ( looking_around_timer > 0 ){
+                        front_looking_dist -= 0.2f;
+                        looking_around_timer = 0;
+                    }
+                    looking_around_timer += 1;
+                }
+                else{
+                    std::sort(angle_dev_vec.begin(), angle_dev_vec.end(), [](const std::pair<float, float>& a, const std::pair<float, float>& b) {
+                        if(a.first != b.first)
+                            return a.first > b.first;
+                    });
+                    std::sort(angle_dev_candidate_vec.begin(), angle_dev_candidate_vec.end(), [](const std::pair<float, float>& a, const std::pair<float, float>& b) {
+                        if(a.first != b.first)
+                            return a.first > b.first;
+                    });
+                    hasFront = true;
+                    front_looking_dist = 2.0f;
+                    looking_around_timer = 0;
+                    is_record_ori_angle = false;
+                }
+                is_looking_around_started = false;
+            }            
+        }
+
+        /*
+            Front checking
+            - Check that whether there has clear path in front of current direction
+            - If no target and currnet fron has no path, move to the next longest (perhaps avoiding past) front to check
+        */
+        bool hasObOnPath = false; 
+        float angle_to_turn{0.0f};
+        if ( hasFront ){
+            if ( FoundFront == false ){
+                for(const auto& pair_cand : angle_dev_candidate_vec) {
+                    for(const auto& pair : angle_dev_vec) {
+                        float angDev = std::abs( pair_cand.second - pair.second );
+                        if ( angDev <= 45.0f / 180.0f * M_PI ){
+                            if ( pair.first * std::sin( angDev ) <= 0.1f ){
+                                hasObOnPath = true;
+                                break;
+                            }
+                        }
+                    }
+    
+                    if ( hasObOnPath == false ){
+                        FoundFront = true;
+                        Goto(od4, 0.0f, 0.0f, 0.0f, pair_cand.second, 10);
+                    }
+                }
+            }
+            else{
+                current_angle = cur_state.yaw; // Taking from communication
+                if ( std::abs( current_angle - ori_angle ) <= 5.0f / 180.0f * M_PI ){
+                    hasFront = false;
+                    FoundFront = false;
+                    hasClearPath = true;
+                }
+            }
+        }
+
        // If the front is larger than the safe dist and the turning mode is off, move to the destination
        if ( front > safe_dist && Turning_mode == false ){
             float dist_to_move = 0.1f;
