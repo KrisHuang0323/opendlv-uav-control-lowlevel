@@ -135,6 +135,46 @@ int32_t main(int32_t argc, char **argv) {
     // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
     od4.dataTrigger(opendlv::logic::sensation::CrazyFlieState::ID(), onStateRead);
 
+    float dist_target{0.0f};
+    float dist_osb{0.0f};
+    std::mutex distMutex;
+    auto onDistRead = [&distMutex, &dist_target, &dist_osb](cluon::data::Envelope &&env){
+        auto senderStamp = env.senderStamp();
+        // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
+        opendlv::logic::action::PreviewPoint pPtmessage = cluon::extractMessage<opendlv::logic::action::PreviewPoint>(std::move(env));
+        
+        // Store distance readings.
+        std::lock_guard<std::mutex> lck(distMutex);
+        if ( senderStamp == 0 ){
+            dist_target = pPtmessage.distance();
+        }
+        else if ( senderStamp == 1 ){
+            dist_osb = pPtmessage.distance();
+        }
+    };
+    // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
+    od4.dataTrigger(opendlv::logic::action::PreviewPoint::ID(), onDistRead);
+
+    float aimDirection_target{0.0f};
+    float aimDirection_obs{0.0f};
+    std::mutex aimDirectionMutex;
+    auto onAimDirectionRead = [&aimDirectionMutex, &aimDirection_target, &aimDirection_obs](cluon::data::Envelope &&env){
+        auto senderStamp = env.senderStamp();
+        // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
+        opendlv::logic::action::AimDirection aDirmessage = cluon::extractMessage<opendlv::logic::action::AimDirection>(std::move(env));
+        
+        // Store aim direction readings.
+        std::lock_guard<std::mutex> lck(aimDirectionMutex);
+        if ( senderStamp == 0 ){
+            aimDirection_target = aDirmessage.azimuthAngle();
+        }
+        else if ( senderStamp == 1 ){
+            aimDirection_obs = aDirmessage.azimuthAngle();
+        }
+    };
+    // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
+    od4.dataTrigger(opendlv::logic::action::AimDirection::ID(), onAimDirectionRead);
+
     // Endless loop; end the program by pressing Ctrl-C.
     float safe_dist = 0.5f;
     float front_looking_dist = 2.0f;
@@ -158,6 +198,8 @@ int32_t main(int32_t argc, char **argv) {
     bool is_record_ori_angle = false;
     std::vector<std::pair<float, float>> angle_dev_vec;
     std::vector<std::pair<float, float>> angle_dev_candidate_vec;
+    bool is_tg_reaching_turning_started = false;
+    bool is_tg_reaching_goto_started = false;
     while (od4.isRunning()) {
         // Sleep for 100 ms to not let the loop run to fast
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -175,8 +217,8 @@ int32_t main(int32_t argc, char **argv) {
             Obstacle avoidance
             - Check that whether there are purple balls occur in the vision
             - Dodge the ball according to the ball's movement
+            - Turn off Goto_started and looking around started while some obstacles occur
         */
-        // Turn off Goto_started and looking around started while some obstacles occur
 
 
         /*
@@ -200,8 +242,50 @@ int32_t main(int32_t argc, char **argv) {
             Target reaching
             - Check that whether there has green ball as target
             - If green ball exist, then crazyflie will go to it straightforwardly
+            - Turn off Goto_started and looking around started while some target occur
         */
-        // Turn off Goto_started and looking around started while some target occur
+        if ( aimDirection_target > 0.05f ){
+            // Reset flag
+            hasClearPath = false;
+            is_Goto_started = false;
+            hasFront = false;
+            FoundFront = false;
+            is_record_ori_angle = false;
+            is_looking_around_started = false;
+            front_looking_dist = 2.0f;
+            looking_around_timer = 0;
+
+            if ( is_tg_reaching_turning_started == false ){
+                ori_angle = cur_state.yaw; // Taking from communication
+                Goto(od4, 0.0f, 0.0f, 0.0f, aimDirection_target, 10);
+                is_tg_reaching_turning_started = true;
+                continue;
+            }
+        }
+        else{
+            is_tg_reaching_turning_started = false;
+        }
+
+        if ( dist_target > 0.05f ){
+            // Reset flag
+            hasClearPath = false;
+            is_Goto_started = false;
+            hasFront = false;
+            FoundFront = false;
+            is_record_ori_angle = false;
+            is_looking_around_started = false;
+            front_looking_dist = 2.0f;
+            looking_around_timer = 0;
+            
+            if ( is_tg_reaching_goto_started == false ){
+                Goto(od4, 3.0f, 0.0f, 0.0f, 0.0f, 10);
+                is_tg_reaching_goto_started = true;
+                continue;
+            }
+        }
+        else{
+            is_tg_reaching_goto_started = false;
+        }
 
         /*
             Front reaching
@@ -304,54 +388,6 @@ int32_t main(int32_t argc, char **argv) {
                     hasClearPath = true;
                 }
             }
-        }
-
-       // If the front is larger than the safe dist and the turning mode is off, move to the destination
-       if ( front > safe_dist && Turning_mode == false ){
-            float dist_to_move = 0.1f;
-            Goto(od4, dist_to_move, 0.0f, 0.0f, 0.0f, 1);
-            dist_moved += dist_to_move;
-            Timer += 1;
-            continue;
-        }           
-
-        // Turn the turning mode on
-        if ( Turning_mode == false ){
-            Turning_mode = true;
-        }
-        
-        // Record dist moved
-        if ( dist_moved != 0.0f && dist_moved_so_far < dist_moved ){
-            dist_moved_so_far = dist_moved;
-            dist_moved = 0;
-        }     
-
-        // Change the front looking distance while the dist moved got stucked
-        if ( Timer >= timer_max && dist_moved_so_far <= front_looking_dist ){
-            front_looking_dist += 0.5f;
-            dist_moved_so_far = 0;
-            Timer = 0;
-        }
-
-        // If the crazyflie has already turned around and can not find anything, shorten the front looking dist
-        if ( angle_moved >= 2 * M_PI ){
-            front_looking_dist -= 0.2f;
-            angle_moved = 0;
-        }
-        
-        // Tuning around to find somewhere to go to 
-        if ( front <= front_looking_dist ){
-            // Turn around to see whether somewhere can go
-            float angle = 5.0f / 180.0f * M_PI;
-            Goto(od4, 0.0f, 0.0f, 0.0f, angle, 1);
-            angle_moved += angle;
-        }
-        else{
-            // Turn off turning mode while some directions found
-            Turning_mode = false;
-
-            // Reset moved angle
-            angle_moved = 0;
         }
     }
 
