@@ -200,6 +200,7 @@ int32_t main(int32_t argc, char **argv) {
     std::vector<std::pair<float, float>> angle_dev_candidate_vec;
     bool is_tg_reaching_turning_started = false;
     bool is_tg_reaching_goto_started = false;
+    float battery_threshold = 2.5f;
     while (od4.isRunning()) {
         // Sleep for 100 ms to not let the loop run to fast
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -208,7 +209,7 @@ int32_t main(int32_t argc, char **argv) {
             Takeoff
             - Do it before start any goto action
         */
-        if ( hasTakeoff == false && cur_state.battery_state > 3.6f ){
+        if ( hasTakeoff == false && cur_state.battery_state > battery_threshold ){
             Takeoff(od4, 1.0f, 3);
             hasTakeoff = true;
         }
@@ -226,7 +227,7 @@ int32_t main(int32_t argc, char **argv) {
             - Check the battery status
             - Go back to charging state while the status gets too low
         */        
-        if ( cur_state.battery_state <= 3.6f ){   // Take from communication or state estimator
+        if ( cur_state.battery_state <= battery_threshold ){   // Take from communication or state estimator
             // Do Go back motion
             
             // Implement landing for now
@@ -294,11 +295,13 @@ int32_t main(int32_t argc, char **argv) {
         */
         if ( hasClearPath ){
             if ( is_Goto_started == false ){
+                std::clog <<" Found a clear path start GOTO action." << std::endl;
                 Goto(od4, 3.0f, 0.0f, 0.0f, 0.0f, 10);
                 is_Goto_started = true;
                 continue;
             }
             else if ( front <= safe_dist ){
+                std::clog <<" GOTO action meets limit." << std::endl;
                 Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 1, true);
                 is_Goto_started = false;
                 hasClearPath = false;
@@ -312,11 +315,15 @@ int32_t main(int32_t argc, char **argv) {
         */
         if ( hasFront == false ){
             if ( is_record_ori_angle == false ){
+                std::clog <<" No front, start record the original angle." << std::endl;
                 ori_angle = cur_state.yaw; // Taking from communication
+                angle_dev_vec.clear();
+                angle_dev_candidate_vec.clear();
                 is_record_ori_angle = true;
             }
 
             if ( is_looking_around_started == false ){
+                std::clog <<" No front, start looking around." << std::endl;
                 Goto(od4, 0.0f, 0.0f, 0.0f, M_PI, 10);
                 is_looking_around_started = true;
             }
@@ -324,19 +331,23 @@ int32_t main(int32_t argc, char **argv) {
             current_angle = cur_state.yaw; // Taking from communication
             angle_dev_vec.insert(angle_dev_vec.begin(),{front,std::abs( current_angle - ori_angle ) });
             if ( front >= front_looking_dist ){
+                std::clog <<" No front, has candidate direction with front:" << front << " , and angle:" << std::abs( current_angle - ori_angle ) << std::endl;
                 angle_dev_candidate_vec.insert(angle_dev_candidate_vec.begin(),{front,std::abs( current_angle - ori_angle ) });
             }
 
             // Check whether to end the looking around motion
             if ( std::abs( current_angle - ori_angle ) >= M_PI - 1 / 180.0f * M_PI ){
-                if ( angle_dev_candidate_vec.size() <= 0 ){
+                if ( angle_dev_candidate_vec.size() <= 0 ){                    
+                    std::clog <<" No front, Complete half circle looking." << std::endl;
                     if ( looking_around_timer > 0 ){
                         front_looking_dist -= 0.2f;
                         looking_around_timer = 0;
+                        std::clog <<" No front, Complete the whole looking withou candidate, shrink front looking distance to:" << front_looking_dist << std::endl;
                     }
                     looking_around_timer += 1;
                 }
                 else{
+                    std::clog <<" No front, Found cadidate direction with size:" << angle_dev_candidate_vec.size() << std::endl;
                     std::sort(angle_dev_vec.begin(), angle_dev_vec.end(), [](const std::pair<float, float>& a, const std::pair<float, float>& b) {
                         if(a.first != b.first)
                             return a.first > b.first;
@@ -362,7 +373,9 @@ int32_t main(int32_t argc, char **argv) {
         bool hasObOnPath = false; 
         float angle_to_turn{0.0f};
         if ( hasFront ){
+            // std::clog <<" Has front, start checking." << std::endl;
             if ( FoundFront == false ){
+                std::clog <<" Has front, start looping with candidate size:" << angle_dev_candidate_vec.size() << std::endl;
                 for(const auto& pair_cand : angle_dev_candidate_vec) {
                     for(const auto& pair : angle_dev_vec) {
                         float angDev = std::abs( pair_cand.second - pair.second );
@@ -374,15 +387,25 @@ int32_t main(int32_t argc, char **argv) {
                         }
                     }
     
-                    if ( hasObOnPath == false ){
+                    if ( hasObOnPath ){
+                        std::clog <<" Found a direction to go to, start turning." << std::endl;
                         FoundFront = true;
                         Goto(od4, 0.0f, 0.0f, 0.0f, pair_cand.second, 10);
+                        break;
                     }
+                }
+
+                if ( hasObOnPath == false ){
+                    std::clog <<" No direction found, shrink the front looking distance." << std::endl;
+                    hasFront = false;
+                    front_looking_dist -= 0.2f;                  
                 }
             }
             else{
                 current_angle = cur_state.yaw; // Taking from communication
+                std::clog <<" Font frount, still turning." << std::endl;
                 if ( std::abs( current_angle - ori_angle ) <= 5.0f / 180.0f * M_PI ){
+                    std::clog <<" Found a direction to go to, turning ended, about to do goto action." << std::endl;
                     hasFront = false;
                     FoundFront = false;
                     hasClearPath = true;
