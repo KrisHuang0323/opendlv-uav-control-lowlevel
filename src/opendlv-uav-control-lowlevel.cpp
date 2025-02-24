@@ -40,7 +40,7 @@ void Takeoff(cluon::OD4Session &od4, float height, int duration){
     std::this_thread::sleep_for(std::chrono::milliseconds(duration*1000 + 500));
 }
 
-void Goto(cluon::OD4Session &od4, float x, float y, float z, float yaw, int duration, bool isdelay = false){
+void Goto(cluon::OD4Session &od4, float x, float y, float z, float yaw, int duration, int relative = 1, bool isdelay = false){
     std::cout << "Go to position : x: "<< x << " ,y: " << y << " ,z: " << z << " , yaw: " << yaw << std::endl;
     cluon::data::TimeStamp sampleTime;
     opendlv::logic::action::CrazyFlieCommand cfcommand;
@@ -49,6 +49,7 @@ void Goto(cluon::OD4Session &od4, float x, float y, float z, float yaw, int dura
     cfcommand.z(z);
     cfcommand.yaw(yaw);
     cfcommand.time(duration);
+    cfcommand.relative(relative);
     od4.send(cfcommand, sampleTime, 3);
     if ( isdelay ){
         std::this_thread::sleep_for(std::chrono::milliseconds(duration*1000 + 500));
@@ -71,6 +72,15 @@ void Stopping(cluon::OD4Session &od4){
     opendlv::logic::action::CrazyFlieCommand cfcommand;
     od4.send(cfcommand, sampleTime, 2);
     std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+}
+
+float angleDifference(float angle1, float angle2) {
+    float diff = angle2 - angle1;
+    diff = std::fmod(diff + M_PI, 2 * M_PI);
+    if (diff < 0)
+        diff += 2 * M_PI;
+    diff -= M_PI;
+    return diff;
 }
 
 /*
@@ -305,7 +315,7 @@ int32_t main(int32_t argc, char **argv) {
             }
             else if ( front <= safe_dist ){
                 std::cout <<" GOTO action meets limit." << std::endl;
-                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 1, true);
+                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 1, 1, true);
                 is_Goto_started = false;
                 hasClearPath = false;
             }
@@ -337,14 +347,14 @@ int32_t main(int32_t argc, char **argv) {
             }
 
             current_angle = cur_state.yaw; // Taking from communication
-            angle_dev_vec.insert(angle_dev_vec.begin(),{front,std::abs( current_angle - ori_angle ) });
+            angle_dev_vec.insert(angle_dev_vec.begin(),{front,current_angle});
             if ( front >= front_looking_dist ){
-                std::cout <<" No front, has candidate direction with front:" << front << " , and angle:" << std::abs( current_angle - ori_angle ) << std::endl;
-                angle_dev_candidate_vec.insert(angle_dev_candidate_vec.begin(),{front,std::abs( current_angle - ori_angle ) });
+                std::cout <<" No front, has candidate direction with front:" << front << " , and angle:" << current_angle << std::endl;
+                angle_dev_candidate_vec.insert(angle_dev_candidate_vec.begin(),{front,current_angle});
             }
 
             // Check whether to end the looking around motion
-            if ( std::abs( current_angle - start_turning_angle ) >= M_PI * 2 / 3 - 1 / 180.0f * M_PI ){
+            if ( std::abs( angleDifference( current_angle, start_turning_angle ) ) >= M_PI * 2 / 3 - 1 / 180.0f * M_PI ){
                 std::cout <<" No front, Complete half circle looking." << std::endl;
                 if ( looking_around_timer > 1 ){
                     if ( angle_dev_candidate_vec.size() <= 0 ){
@@ -354,10 +364,10 @@ int32_t main(int32_t argc, char **argv) {
                     else{
                         // Here means we found some candidates
                         std::cout <<" No front, Found cadidate direction with size:" << angle_dev_candidate_vec.size() << std::endl;
-                        std::sort(angle_dev_vec.begin(), angle_dev_vec.end(), [](const std::pair<float, float>& a, const std::pair<float, float>& b) {
-                            if(a.first != b.first)
-                                return a.first > b.first;
-                        });
+                        // std::sort(angle_dev_vec.begin(), angle_dev_vec.end(), [](const std::pair<float, float>& a, const std::pair<float, float>& b) {
+                        //     if(a.first != b.first)
+                        //         return a.first > b.first;
+                        // });
                         std::sort(angle_dev_candidate_vec.begin(), angle_dev_candidate_vec.end(), [](const std::pair<float, float>& a, const std::pair<float, float>& b) {
                             if(a.first != b.first)
                                 return a.first > b.first;
@@ -387,11 +397,13 @@ int32_t main(int32_t argc, char **argv) {
         if ( hasFront ){
             // std::cout <<" Has front, start checking." << std::endl;
             if ( FoundFront == false ){
+                ori_angle = cur_state.yaw; // Taking from communication
                 std::cout <<" Has front, start looping with candidate size:" << angle_dev_candidate_vec.size() << std::endl;
                 for(const auto& pair_cand : angle_dev_candidate_vec) {
+                    float angMin = std::abs( std::atan2( 0.1f, pair_cand.first ) );
                     for(const auto& pair : angle_dev_vec) {
-                        float angDev = std::abs( pair_cand.second - pair.second );
-                        if ( angDev <= 45.0f / 180.0f * M_PI && pair.first < pair_cand.first - 0.5f ){
+                        float angDev = std::abs( angleDifference( pair_cand.second, pair.second ) );
+                        if ( angDev <= 45.0f / 180.0f * M_PI && angDev >= angMin ){
                             if ( pair.first * std::sin( angDev ) <= 0.1f ){
                                 hasObOnPath = true;
                                 break;
@@ -399,21 +411,13 @@ int32_t main(int32_t argc, char **argv) {
                         }
                     }
 
-                    std::cout <<" Found a direction to go to, start turning." << std::endl;
-                    hasFront = false;
-                    FoundFront = false;
-                    hasClearPath = true;
-                    // FoundFront = true;
-                    // angle_to_turn = pair_cand.second;
-                    // Goto(od4, 0.0f, 0.0f, 0.0f, 2 * M_PI, 3);
-                    break;
-                    // if ( hasObOnPath == false ){
-                    //     std::cout <<" Found a direction to go to, start turning." << std::endl;
-                    //     FoundFront = true;
-                    //     angle_to_turn = pair_cand.second;
-                    //     Goto(od4, 0.0f, 0.0f, 0.0f, 2 * M_PI, 3);
-                    //     break;
-                    // }
+                    if ( hasObOnPath == false ){
+                        std::cout <<" Found a direction to go to, start turning." << std::endl;
+                        FoundFront = true;
+                        angle_to_turn = angleDifference( pair_cand.second, ori_angle );
+                        Goto(od4, 0.0f, 0.0f, 0.0f, angle_to_turn, 3);
+                        break;
+                    }
                 }
 
                 if ( angle_to_turn < 0.0f ){
@@ -425,7 +429,7 @@ int32_t main(int32_t argc, char **argv) {
             else{
                 current_angle = cur_state.yaw; // Taking from communication
                 std::cout <<" Found front, still turning to the angle to turn:" << angle_to_turn << ", original angle: " << ori_angle << ", current angle: " << current_angle << std::endl;
-                if ( std::abs( std::abs( current_angle - ori_angle ) - angle_to_turn ) <= 5.0f / 180.0f * M_PI ){
+                if ( std::abs( angleDifference( current_angle, ori_angle + angle_to_turn ) ) <= 5.0f / 180.0f * M_PI ){
                     std::cout <<" Found a direction to go to, turning ended, about to do goto action." << std::endl;
                     hasFront = false;
                     FoundFront = false;
