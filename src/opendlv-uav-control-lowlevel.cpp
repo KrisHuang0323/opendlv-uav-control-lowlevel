@@ -49,7 +49,7 @@ void Goto(cluon::OD4Session &od4, float x, float y, float z, float yaw, int dura
     cfcommand.z(z);
     cfcommand.yaw(yaw);
     cfcommand.time(duration);
-    cfcommand.relative(relative);
+    // cfcommand.relative(relative);
     od4.send(cfcommand, sampleTime, 3);
     if ( isdelay ){
         std::this_thread::sleep_for(std::chrono::milliseconds(duration*1000 + 500));
@@ -217,7 +217,7 @@ int32_t main(int32_t argc, char **argv) {
     bool is_tg_reaching_turning_started = false;
     bool is_tg_reaching_goto_started = false;
     bool ready_to_reach_target = false;
-    float battery_threshold = 2.5f;
+    float battery_threshold = 3.15f;
     float angle_to_turn{-1.0f};
     float cur_path_front{0.0f};
     while (od4.isRunning()) {
@@ -333,7 +333,7 @@ int32_t main(int32_t argc, char **argv) {
             if ( is_Goto_started == false ){
                 std::cout <<" Found a clear path start GOTO action." << std::endl;
                 current_angle = cur_state.yaw;
-                float move_dist = cur_path_front - 0.5f;
+                float move_dist = cur_path_front - 0.25f;
                 if ( move_dist < 0.0f ){
                     move_dist = 0.1f;
                 }
