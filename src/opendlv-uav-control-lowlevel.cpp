@@ -151,8 +151,9 @@ int32_t main(int32_t argc, char **argv) {
 
     float dist_target{-1.0f};
     float dist_obs{-1.0f};
+    float dist_chpad{-1.0f};
     std::mutex distMutex;
-    auto onDistRead = [&distMutex, &dist_target, &dist_obs](cluon::data::Envelope &&env){
+    auto onDistRead = [&distMutex, &dist_target, &dist_obs, &dist_chpad](cluon::data::Envelope &&env){
         auto senderStamp = env.senderStamp();
         // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
         opendlv::logic::action::PreviewPoint pPtmessage = cluon::extractMessage<opendlv::logic::action::PreviewPoint>(std::move(env));
@@ -165,14 +166,18 @@ int32_t main(int32_t argc, char **argv) {
         else if ( senderStamp == 1 ){
             dist_obs = pPtmessage.distance();
         }
+        else if ( senderStamp == 2 ){
+            dist_chpad = pPtmessage.distance();
+        }
     };
     // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
     od4.dataTrigger(opendlv::logic::action::PreviewPoint::ID(), onDistRead);
 
     float aimDirection_target{-4.0f};
     float aimDirection_obs{-4.0f};
+    float aimDirection_chpad{-4.0f};
     std::mutex aimDirectionMutex;
-    auto onAimDirectionRead = [&aimDirectionMutex, &aimDirection_target, &aimDirection_obs](cluon::data::Envelope &&env){
+    auto onAimDirectionRead = [&aimDirectionMutex, &aimDirection_target, &aimDirection_obs, &aimDirection_chpad](cluon::data::Envelope &&env){
         auto senderStamp = env.senderStamp();
         // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
         opendlv::logic::action::AimDirection aDirmessage = cluon::extractMessage<opendlv::logic::action::AimDirection>(std::move(env));
@@ -184,6 +189,9 @@ int32_t main(int32_t argc, char **argv) {
         }
         else if ( senderStamp == 1 ){
             aimDirection_obs = aDirmessage.azimuthAngle();
+        }
+        else if ( senderStamp == 2 ){
+            aimDirection_chpad = aDirmessage.azimuthAngle();
         }
     };
     // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
@@ -229,138 +237,174 @@ int32_t main(int32_t argc, char **argv) {
     bool is_backto_start = false;
     bool test = false;
     int testTimer = 0;
+    bool GOTO_MODE = false;
+    bool GOTO_LDODGING_MODE = false;
+    bool GOTO_RDODGING_MODE = false;
+    bool DODGING_MODE = false;
+    bool DODGING_LDODGING_MODE = false;
+    bool DODGING_RDODGING_MODE = false;
+    bool BACKTO_MODE = false;
+    bool HOMING_MODE = false;
+    bool REACHING_MODE = false;
+    float dist_to_move = 0.0f;
+    int16_t move_time = 5;
+    int dodginTimer = 0;
+    struct posState {
+        float front;
+        float rear;
+        float left;
+        float right;
+        float yaw;
+    };
+    std::vector<posState> pos_state_vec;
     while (od4.isRunning()) {
         // Sleep for 10 ms to not let the loop run to fast
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+        // Record current distance info
 
         /*
             Takeoff
             - Do it before start any goto action
         */
-        if ( hasTakeoff == false && cur_state.battery_state > battery_threshold ){
+        if ( hasTakeoff == false && cur_state.battery_state > 3.8f ){
             Takeoff(od4, 1.0f, 3);
             hasTakeoff = true;
         }
 
         /*
             Obstacle avoidance
+            - Check that whether any direction is too close
+        */
+        float safe_front_dist = 0.5f;
+        float safe_left_dist = 0.1f;
+        if ( GOTO_MODE ){
+            if ( front <= safe_front_dist + dist_to_move / move_time + 0.1f ){
+                std::cout <<" GOTO action meets limit." << std::endl;
+                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0);   // Stop flying in current direction
+                GOTO_MODE = false;
+                hasClearPath = false;
+                pre_angle = cur_state.yaw + M_PI;
+                continue;
+            }
+            else if ( left <= safe_left_dist ){
+                std::cout <<" GOTO action close to left..." << std::endl;
+                Goto(od4, 0.2f * std::sin( cur_state.yaw ), - 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);   // Fly slightly to right
+                GOTO_MODE = false;
+                hasClearPath = true;
+                pre_angle = cur_state.yaw + M_PI;
+                continue;
+            }
+            else if ( right <= safe_left_dist ){
+                std::cout <<" GOTO action close to right..." << std::endl;
+                Goto(od4, - 0.2f * std::sin( cur_state.yaw ), 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);   // Fly slightly to left
+                GOTO_MODE = false;
+                hasClearPath = true;
+                pre_angle = cur_state.yaw + M_PI;
+                continue;
+            }
+        }
+        else if ( DODGING_MODE ){
+            if ( rear <= safe_front_dist + dist_to_move / move_time + 0.1f ){
+                std::cout <<" Dodging reaching the wall, try to fly up..." << std::endl;
+                Goto(od4, 0.0f, 0.0f, 1.0f, 0.0f, 3, 1, true);
+                Goto(od4, 0.0f, 0.0f, -1.0f, 0.0f, 3, 1, true);
+                if ( hasClearPath ){
+                    hasClearPath = false;
+                }
+                pre_angle = cur_state.yaw + M_PI;
+                
+                if ( is_looking_around_started ){
+                    is_looking_around_started = false;
+                }
+    
+                if ( FoundFront ){
+                    FoundFront = false;
+                }
+                DODGING_MODE = false;
+                continue;
+            }
+            else if ( left <= safe_left_dist ){
+                std::cout <<" Dodging action close to left..." << std::endl;
+                Goto(od4, 0.2f * std::sin( cur_state.yaw ), - 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);   // Fly slightly to right
+                if ( hasClearPath ){
+                    hasClearPath = false;
+                }
+                pre_angle = cur_state.yaw + M_PI;
+                
+                if ( is_looking_around_started ){
+                    is_looking_around_started = false;
+                }
+    
+                if ( FoundFront ){
+                    FoundFront = false;
+                }
+                DODGING_MODE = false;
+                continue;
+            }
+            else if ( right <= safe_left_dist ){
+                std::cout <<" Dodging action close to right..." << std::endl;
+                Goto(od4, - 0.2f * std::sin( cur_state.yaw ), 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);   // Fly slightly to left
+                if ( hasClearPath ){
+                    hasClearPath = false;
+                }
+                pre_angle = cur_state.yaw + M_PI;
+                
+                if ( is_looking_around_started ){
+                    is_looking_around_started = false;
+                }
+    
+                if ( FoundFront ){
+                    FoundFront = false;
+                }
+                DODGING_MODE = false;
+                continue;
+            }
+        }
+
+        /*
+            Dynamic obstacles dodging
             - Check that whether there are purple balls occur in the vision
             - Dodge the ball according to the ball's movement
-            - Turn off Goto_started and looking around started while some obstacles occur
         */
        if ( dist_obs <= 250.0f && dist_obs > -1.0f ){    // Means that some obstacles approach
             std::cout <<" In dodging mode..." << std::endl;
-            // Record the left/right for back to use
-            if ( tobackto_dodging_left < 0.0f || tobackto_dodging_right < 0.0f ){
-                tobackto_dodging_left = left;
-                tobackto_dodging_right = right;
-                std::cout <<"Record Tobackto left and right :" << tobackto_dodging_right << " ,left:" << tobackto_dodging_left << std::endl;
-            }
-
-            // Reset the start flag of backto first
-            if ( is_backto_start ){
-                is_backto_start = false;
-            }
-            testTimer = 0;
-            is_tg_reaching_turning_started = false;
-            is_tg_reaching_goto_started = false;
-
-            current_angle = cur_state.yaw;
-            float move_dist = 0.5f;
-            if ( is_dodging_start == false ){
-                if ( cur_dodging_left < 0.0f || cur_dodging_right < 0.0f ){
-                    cur_dodging_left = left;
-                    cur_dodging_right = right;
-                }
-
-                if ( left > move_dist && right > move_dist ){
-                    if ( aimDirection_obs > 0.0f )
-                        Goto(od4, move_dist * std::sin( current_angle ), - move_dist * std::cos( current_angle ), 0.0f, 0.0f, 0);
-                    else
-                        Goto(od4, - move_dist * std::sin( current_angle ), move_dist * std::cos( current_angle ), 0.0f, 0.0f, 0);
-                }
-                else if ( left > move_dist )
-                    Goto(od4, - move_dist * std::sin( current_angle ), move_dist * std::cos( current_angle ), 0.0f, 0.0f, 0);
-                else if ( right > 0.1f )
-                    Goto(od4, move_dist * std::sin( current_angle ), - move_dist * std::cos( current_angle ), 0.0f, 0.0f, 0);
-
-                is_dodging_start = true;                
-            }
-            else{
-                float dist = ( std::abs( left - cur_dodging_left ) + std::abs( right - cur_dodging_right ) ) / 2.0f;
-                std::cout <<" Current dist to move :" << dist << std::endl;
-                std::cout <<"     Current left and right :" << right << " ,left:" << left << std::endl;
-                std::cout <<"     Tobackto left and right :" << tobackto_dodging_right << " ,left:" << tobackto_dodging_left << std::endl;
-                if ( dist >= move_dist - 0.02f ){
-                    is_dodging_start = false;
-                    cur_dodging_left = -1.0f;
-                    cur_dodging_right = -1.0f;
-                    // Landing(od4, 0.0f, 3);
-                    // Stopping(od4);
-                    // break;
-                }
-            }  
-            continue;
-        }
-
-        // Back to the original place
-        if ( tobackto_dodging_left >= 0.0f || tobackto_dodging_right >= 0.0f ){
-            std::cout <<" In backto mode..." << std::endl;
-
-            if ( dist_obs <= -1.0f ){
-                std::cout <<" The ball has gone..." << std::endl;
-            }
-
-            if ( dist_obs > 250.0f ){
-                std::cout <<" The ball is too far away..." << std::endl;
-            }
-
-            if ( testTimer <= 80 ){
-                testTimer += 1;
-                std::cout <<" Waiting... Current left and right :" << right << " ,left:" << left << std::endl;
+            dist_to_move = rear;
+            move_time = 5;
+            if ( DODGING_MODE == false ){
+                std::cout <<" Try to dodge to the back..." << std::endl;
+                Goto(od4, - dist_to_move * std::cos( current_angle ), - dist_to_move * std::sin( current_angle ), 0.0f, 0.0f, move_time);
+                DODGING_MODE = true;
                 continue;
-            }
+            }           
+            
+            // if ( dodginTimer >= 50 ){
+            //     std::cout <<" Dodging over timer..." << std::endl;
+            //     Goto(od4, 0.0f, 0.0f, 1.0f, 0.0f, 3, 1, true);
+            //     Goto(od4, 0.0f, 0.0f, -1.0f, 0.0f, 3, 1, true);
+            //     hasClearPath = true;
+            //     pre_angle = cur_state.yaw + M_PI;
+            //     DODGING_MODE = false;
+            //     dodginTimer = 0;
+            //     continue;
+            // }
 
-            // Reset the start flag of dodging first
-            if ( is_dodging_start ){
-                is_dodging_start = false;
-                cur_dodging_left = -1.0f;
-                cur_dodging_right = -1.0f;
-            }
-
-            if ( is_backto_start == false ){
-                float backto_dist = ( std::abs( tobackto_dodging_left - left ) + std::abs( tobackto_dodging_right - right ) ) / 2.0f + 0.1f;
-                std::cout <<" Back to dist to move :" << backto_dist << std::endl;
-                std::cout <<"     Current left and right :" << right << " ,left:" << left << std::endl;
-                std::cout <<"     Tobackto left and right :" << tobackto_dodging_right << " ,left:" << tobackto_dodging_left << std::endl;
-                if ( left - tobackto_dodging_left < 0.0f || right - tobackto_dodging_right > 0.0f )
-                    Goto(od4, backto_dist * std::sin( current_angle ), - backto_dist * std::cos( current_angle ), 0.0f, 0.0f, 0);
-                else
-                    Goto(od4, - backto_dist * std::sin( current_angle ), backto_dist * std::cos( current_angle ), 0.0f, 0.0f, 0);
-
-                is_backto_start = true;
-            }
-            else{
-                float dist = ( std::abs( tobackto_dodging_left - left ) + std::abs( tobackto_dodging_right - right ) ) / 2.0f;
-                std::cout <<" Current distance left :" << dist << std::endl;
-                std::cout <<"     Current left and right :" << right << " ,left:" << left << std::endl;
-                std::cout <<"     Tobackto left and right :" << tobackto_dodging_right << " ,left:" << tobackto_dodging_left << std::endl;
-                if ( dist <= 0.05f ){
-                    is_backto_start = false;
-                    tobackto_dodging_left = -1.0f;
-                    tobackto_dodging_right = -1.0f;
-                    testTimer = 0;
-                    std::cout <<" Back to original point and do reset" << std::endl;
-                    // Landing(od4, 0.0f, 3);
-                    // Stopping(od4);
-                    // break;
-                }
-            }            
+            dodginTimer += 1;
             continue;
         }
+        if ( DODGING_MODE ){
+            if ( hasClearPath ){
+                hasClearPath = false;
+            }
+            
+            if ( is_looking_around_started ){
+                is_looking_around_started = false;
+            }
 
-        // Test leave
-        // continue;
+            if ( FoundFront ){
+                FoundFront = false;
+            }
+        }
         
         /*
             Homing
@@ -398,7 +442,11 @@ int32_t main(int32_t argc, char **argv) {
 
             if ( is_tg_reaching_turning_started == false ){
                 ori_angle = cur_state.yaw; // Taking from communication
-                Goto(od4, 0.0f, 0.0f, 0.0f, aimDirection_target, 10);
+                float ang_turn = aimDirection_target + 20.0f / 180 * 3.14;
+                if ( aimDirection_target < 0.0f ){
+                    ang_turn = aimDirection_target - 20.0f / 180 * 3.14;
+                } 
+                Goto(od4, 0.0f, 0.0f, 0.0f, ang_turn, 10);
                 is_tg_reaching_turning_started = true;
                 continue;
             }
@@ -410,9 +458,7 @@ int32_t main(int32_t argc, char **argv) {
 
                 ready_to_reach_target = true;
             }
-            else{
-                continue;
-            }
+            continue;
         }
 
         if ( dist_target > -1.0f && ready_to_reach_target ){
@@ -445,58 +491,23 @@ int32_t main(int32_t argc, char **argv) {
             }
         }
 
-        // Test leave
-        // continue;
-
         /*
             Front reaching
             - If path exist, move forward until the front dist less than some threshold
             - After reaching it, do look around action to find target
         */
-        // hasClearPath = true;
-        float move_dist = cur_path_front;
-        int gotoTime = 5;
+        // float move_dist = cur_path_front;
+        // int gotoTime = 5;
         if ( hasClearPath ){
-            front_looking_dist = 0.5f;
-            if ( is_Goto_started == false ){
+            if ( GOTO_MODE == false ){
                 std::cout <<" Found a clear path start GOTO action." << std::endl;
+                dist_to_move = front;
+                move_time = 5;
                 current_angle = cur_state.yaw;
-                // float move_dist = cur_path_front - 0.25f;
-                // float move_dist = 1.5f;
-                // if ( move_dist < 0.0f ){
-                //     move_dist = 0.1f;
-                // }
-                Goto(od4, move_dist * std::cos( current_angle ), move_dist * std::sin( current_angle ), 0.0f, 0.0f, gotoTime);
-                is_Goto_started = true;
+                Goto(od4, dist_to_move * std::cos( current_angle ), dist_to_move * std::sin( current_angle ), 0.0f, 0.0f, move_time);
+                GOTO_MODE = true;
             }
-            else{
-                float saftDist = safe_dist + move_dist / gotoTime * 1.0f;
-                std::cout <<" Current latency safe distance: " << saftDist << std::endl;
-                if ( front <= saftDist ){
-                    std::cout <<" GOTO action meets limit." << std::endl;
-                    std::cout <<" current front: " << front << ", rear: " << rear << ", left: " << left << ", right: " << right << std::endl;
-                    float move_dist = 1.0f;
-                    // Goto(od4, move_dist * std::cos( wrap_angle(current_angle + M_PI) ), move_dist * std::sin( wrap_angle(current_angle + M_PI) ), 0.0f, 0.0f, 1, 1, true);
-                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0);
-                    is_Goto_started = false;
-                    hasClearPath = false;
-    
-                    pre_angle = cur_state.yaw + M_PI;
-                    std::cout <<" After stop front: " << front << ", rear: " << rear << ", left: " << left << ", right: " << right << ", yaw: " << cur_state.yaw << std::endl;
-    
-                    // Testing section
-                    // if ( hasFront )
-                    // {
-                    //     Landing(od4, 0.0f, 3);
-                    //     Stopping(od4);          
-                    //     break;
-                    // }
-                }
-                else{
-                    std::cout <<" Found a clear path, keep going forward..." << std::endl;
-                }
-            }     
-            continue;      
+            continue; 
         }
 
         /*
@@ -504,7 +515,11 @@ int32_t main(int32_t argc, char **argv) {
             - Turn around for 360 degree to see whether target exist
             - In the mean time, record some possible front path to go to
         */
-        if ( hasFront == false ){
+       if ( hasFront == false ){
+            if ( is_tg_reaching_turning_started ){
+                is_tg_reaching_turning_started = false;
+            }
+
             if ( is_record_ori_angle == false ){
                 std::cout <<" No front, start record the original angle." << std::endl;
                 // ori_angle = cur_state.yaw; // Taking from communication
@@ -571,14 +586,6 @@ int32_t main(int32_t argc, char **argv) {
                 continue;
             }         
         }
-
-        // Testing section
-        // if ( hasFront ){
-        //     Landing(od4, 0.0f, 3);
-        //     Stopping(od4);     
-        //     hasFront = false;       
-        //     continue;
-        // }
 
         /*
             Front checking
@@ -649,7 +656,7 @@ int32_t main(int32_t argc, char **argv) {
             }
             else{
                 current_angle = cur_state.yaw; // Taking from communication
-                std::cout <<" Found front, still turning to the angle to turn:" << angle_to_turn << ", original angle: " << ori_angle << ", current angle: " << current_angle << std::endl;
+                // std::cout <<" Found front, still turning to the angle to turn:" << angle_to_turn << ", original angle: " << ori_angle << ", current angle: " << current_angle << std::endl;
                 if ( std::abs( angleDifference( ori_angle + angle_to_turn, current_angle ) ) <= 5.0f / 180.0f * M_PI ){
                     std::cout <<" Found a direction to go to, turning ended, about to do goto action." << std::endl;
                     Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0);
@@ -661,14 +668,6 @@ int32_t main(int32_t argc, char **argv) {
                 }
             }
         }
-
-        // Testing section
-        // if ( hasFront )
-        // {
-        //     Landing(od4, 0.0f, 3);
-        //     Stopping(od4);          
-        //     break;
-        // }
     }
 
     retCode = 0;
