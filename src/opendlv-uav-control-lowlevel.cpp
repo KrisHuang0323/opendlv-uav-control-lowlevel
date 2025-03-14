@@ -251,17 +251,52 @@ int32_t main(int32_t argc, char **argv) {
     int dodginTimer = 0;
     struct posState {
         float front;
-        float rear;
         float left;
         float right;
-        float yaw;
     };
-    std::vector<posState> pos_state_vec;
+    std::vector<posState> pos_LRstate_vec;
+    float start_front{-1.0f};
+    float start_rear{-1.0f};
+    bool is_chpad_reaching_turning_started = false;
+    bool is_chpad_reaching_goto_started = false;
+    bool ready_to_reach_chpad = false;
+    float homing_angle{-4.0f};
+    float homing_temp_angle{-4.0f};
+    bool is_homing_turning_started = false;
+    int timer_homing_turning = 0;
+    bool is_backhome_turning_started = false;
+    bool is_backhome_goto_started = false;
     while (od4.isRunning()) {
         // Sleep for 10 ms to not let the loop run to fast
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-        // Record current distance info
+        // Refresh pos state
+        if ( pos_LRstate_vec.size() > 0 && start_front != -1.0f ){
+            float cur_front_dist = std::abs(front - start_front);
+            float cur_rear_dist = std::abs(rear - start_rear);
+            for ( auto& state : pos_LRstate_vec ){
+                if ( state.front >= 0.0f ){
+                    if (  std::abs( state.front - cur_front_dist ) <= 0.01f ){
+                        if ( state.left != -1.0f ){
+                            state.left = left;
+                        }
+                        else if ( state.right != -1.0f ){
+                            state.right = right;
+                        }
+                    }
+                }                
+                else{
+                    if (  std::abs( - state.front - cur_rear_dist ) <= 0.01f ){
+                        if ( state.left != -1.0f ){
+                            state.left = left;
+                        }
+                        else if ( state.right != -1.0f ){
+                            state.right = right;
+                        }
+                    }
+                }
+            }
+        }
 
         /*
             Takeoff
@@ -282,6 +317,12 @@ int32_t main(int32_t argc, char **argv) {
             if ( front <= safe_front_dist + dist_to_move / move_time + 0.1f ){
                 std::cout <<" GOTO action meets limit." << std::endl;
                 Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0);   // Stop flying in current direction
+
+                // Homing mode
+                if ( HOMING_MODE ){
+                    homing_angle = wrap_angle( cur_state.yaw + M_PI );
+                }
+
                 GOTO_MODE = false;
                 hasClearPath = false;
                 pre_angle = cur_state.yaw + M_PI;
@@ -304,63 +345,6 @@ int32_t main(int32_t argc, char **argv) {
                 continue;
             }
         }
-        else if ( DODGING_MODE ){
-            if ( rear <= safe_front_dist + dist_to_move / move_time + 0.1f ){
-                std::cout <<" Dodging reaching the wall, try to fly up..." << std::endl;
-                Goto(od4, 0.0f, 0.0f, 1.0f, 0.0f, 3, 1, true);
-                Goto(od4, 0.0f, 0.0f, -1.0f, 0.0f, 3, 1, true);
-                if ( hasClearPath ){
-                    hasClearPath = false;
-                }
-                pre_angle = cur_state.yaw + M_PI;
-                
-                if ( is_looking_around_started ){
-                    is_looking_around_started = false;
-                }
-    
-                if ( FoundFront ){
-                    FoundFront = false;
-                }
-                DODGING_MODE = false;
-                continue;
-            }
-            else if ( left <= safe_left_dist ){
-                std::cout <<" Dodging action close to left..." << std::endl;
-                Goto(od4, 0.2f * std::sin( cur_state.yaw ), - 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);   // Fly slightly to right
-                if ( hasClearPath ){
-                    hasClearPath = false;
-                }
-                pre_angle = cur_state.yaw + M_PI;
-                
-                if ( is_looking_around_started ){
-                    is_looking_around_started = false;
-                }
-    
-                if ( FoundFront ){
-                    FoundFront = false;
-                }
-                DODGING_MODE = false;
-                continue;
-            }
-            else if ( right <= safe_left_dist ){
-                std::cout <<" Dodging action close to right..." << std::endl;
-                Goto(od4, - 0.2f * std::sin( cur_state.yaw ), 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);   // Fly slightly to left
-                if ( hasClearPath ){
-                    hasClearPath = false;
-                }
-                pre_angle = cur_state.yaw + M_PI;
-                
-                if ( is_looking_around_started ){
-                    is_looking_around_started = false;
-                }
-    
-                if ( FoundFront ){
-                    FoundFront = false;
-                }
-                DODGING_MODE = false;
-                continue;
-            }
-        }
 
         /*
             Dynamic obstacles dodging
@@ -368,31 +352,96 @@ int32_t main(int32_t argc, char **argv) {
             - Dodge the ball according to the ball's movement
         */
        if ( dist_obs <= 250.0f && dist_obs > -1.0f ){    // Means that some obstacles approach
-            std::cout <<" In dodging mode..." << std::endl;
-            dist_to_move = rear;
-            move_time = 5;
-            if ( DODGING_MODE == false ){
-                std::cout <<" Try to dodge to the back..." << std::endl;
-                Goto(od4, - dist_to_move * std::cos( current_angle ), - dist_to_move * std::sin( current_angle ), 0.0f, 0.0f, move_time);
-                DODGING_MODE = true;
-                continue;
-            }           
-            
-            // if ( dodginTimer >= 50 ){
-            //     std::cout <<" Dodging over timer..." << std::endl;
-            //     Goto(od4, 0.0f, 0.0f, 1.0f, 0.0f, 3, 1, true);
-            //     Goto(od4, 0.0f, 0.0f, -1.0f, 0.0f, 3, 1, true);
-            //     hasClearPath = true;
-            //     pre_angle = cur_state.yaw + M_PI;
-            //     DODGING_MODE = false;
-            //     dodginTimer = 0;
-            //     continue;
-            // }
+            // std::cout <<" In dodging mode..." << std::endl;
+            // dist_to_move = rear;
+            // move_time = 5;
+            float cur_front_dist = std::abs( front - start_front );
+            float cur_rear_dist = std::abs( rear - start_rear );
+            bool hasLeft = true;
+            bool hasRight = true;
+            if ( pos_LRstate_vec.size() <= 0 ){
+                hasLeft = false;
+                hasRight = false;
+            }
+            else{
+                for ( const auto& state : pos_LRstate_vec ){
+                    if ( state.front >= 0.0f ){
+                        float front_dist_dev = std::abs( state.front  - cur_front_dist );
+                        if ( front_dist_dev <= 0.1f ){
+                            if ( state.left <= 0.3f ){
+                                hasLeft = false;
+                            }
+                            else if ( state.right <= 0.3f ){
+                                hasRight = false;
+                            }
+                        }
+                    }
+                    else{
+                        float rear_dist_dev = std::abs( state.front  - cur_rear_dist );
+                        if ( rear_dist_dev <= 0.1f ){
+                            if ( state.left <= 0.3f ){
+                                hasLeft = false;
+                            }
+                            else if ( state.right <= 0.3f ){
+                                hasRight = false;
+                            }
+                        }
+                    }
+    
+                    if ( hasLeft == false && hasRight == false ){
+                        break;
+                    }
+                }
+            }
 
-            dodginTimer += 1;
-            continue;
-        }
-        if ( DODGING_MODE ){
+            if ( aimDirection_obs >= 0.0f ){
+                if ( hasLeft ){
+                    std::cout <<" Try to dodge to the left..." << std::endl;
+                    Goto(od4, - 0.2f * std::sin( cur_state.yaw ), 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);
+                    while ( dist_obs > -1.0f ){
+                        // Wait until the obstacle leave
+                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    }
+                    std::cout <<" Try to go back to the right..." << std::endl;
+                    Goto(od4, 0.2f * std::sin( cur_state.yaw ), - 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);
+                }
+                else{
+                    if ( rear > 0.5f ){
+                        std::cout <<" Try to dodge to the back..." << std::endl;
+                        Goto(od4, - 0.5f * std::cos( current_angle ), - 0.5f * std::sin( current_angle ), 0.0f, 0.0f, 0);
+                    }
+                    else{
+                        std::cout <<" Dodging reaching the wall, try to fly up..." << std::endl;
+                        Goto(od4, 0.0f, 0.0f, 0.3f, 0.0f, 0, 1, true);
+                        Goto(od4, 0.0f, 0.0f, -0.3f, 0.0f, 0, 1, true);
+                    }
+                }
+            }
+            else{
+                if ( hasRight ){
+                    std::cout <<" Try to dodge to the right..." << std::endl;
+                    Goto(od4, 0.2f * std::sin( cur_state.yaw ), - 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);
+                    while ( dist_obs > -1.0f ){
+                        // Wait until the obstacle leave
+                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    }
+                    std::cout <<" Try to go back to the left..." << std::endl;
+                    Goto(od4, - 0.2f * std::sin( cur_state.yaw ), 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);
+                }
+                else{
+                    if ( rear > 0.5f ){
+                        std::cout <<" Try to dodge to the back..." << std::endl;
+                        Goto(od4, - 0.2f * std::cos( current_angle ), - 0.2f * std::sin( current_angle ), 0.0f, 0.0f, 0, 1, true);
+                    }
+                    else{
+                        std::cout <<" Dodging reaching the wall, try to fly up..." << std::endl;
+                        Goto(od4, 0.0f, 0.0f, 0.3f, 0.0f, 0, 1, true);
+                        Goto(od4, 0.0f, 0.0f, -0.3f, 0.0f, 0, 1, true);
+                    }
+                }
+            }
+
+            //Reset flag
             if ( hasClearPath ){
                 hasClearPath = false;
             }
@@ -404,13 +453,84 @@ int32_t main(int32_t argc, char **argv) {
             if ( FoundFront ){
                 FoundFront = false;
             }
+            continue;
         }
         
         /*
             Homing
             - Check the battery status
             - Go back to charging state while the status gets too low
-        */        
+        */   
+        if ( cur_state.battery_state <= 4.2f && aimDirection_chpad > -4.0f && ready_to_reach_chpad == false ){
+            std::cout <<" Found the chpad..." << std::endl;
+            // Reset flag
+            hasClearPath = false;
+            is_Goto_started = false;
+            hasFront = false;
+            FoundFront = false;
+            is_record_ori_angle = false;
+            is_looking_around_started = false;
+
+            if ( is_chpad_reaching_turning_started == false ){
+                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);
+                ori_angle = cur_state.yaw; // Taking from communication
+                float ang_turn = aimDirection_chpad + 20.0f / 180 * 3.14;
+                if ( aimDirection_chpad < 0.0f ){
+                    ang_turn = aimDirection_chpad - 20.0f / 180 * 3.14;
+                } 
+                Goto(od4, 0.0f, 0.0f, 0.0f, ang_turn, 10);
+                is_chpad_reaching_turning_started = true;
+                continue;
+            }
+
+            if ( std::abs( aimDirection_chpad )  <= 3.0f / 180 * M_PI ){
+                if ( is_chpad_reaching_turning_started ){
+                    is_chpad_reaching_turning_started = false;
+                }
+
+                ready_to_reach_chpad = true;
+            }
+            continue;
+        }
+        else if ( ready_to_reach_chpad ){
+            if ( dist_chpad > -1.0f ){
+                std::cout <<" Found the chpad, going to get closer" << std::endl;
+                // Reset flag
+                hasClearPath = false;
+                is_Goto_started = false;
+                hasFront = false;
+                FoundFront = false;
+                is_record_ori_angle = false;
+                is_looking_around_started = false;
+                
+                if ( is_chpad_reaching_goto_started == false ){
+                    current_angle = cur_state.yaw;
+                    Goto(od4, 3.0f * std::cos( current_angle ), 3.0f * std::sin( current_angle ), 0.0f, 0.0f, 5);
+                    GOTO_MODE = true;
+                    is_chpad_reaching_goto_started = true;
+                    continue;
+                }
+    
+                if ( dist_chpad <= 80.0f ){
+                    is_chpad_reaching_goto_started = false;    
+                    ready_to_reach_chpad = false;
+                    GOTO_MODE = false;
+                    HOMING_MODE = true;
+                    homing_angle = -4.0f;
+                    std::cout <<" Reach the chpad..." << std::endl;
+                    break; 
+                }
+                else{
+                    continue;
+                }
+            }
+        }
+        else{
+            ready_to_reach_chpad = false;
+            is_chpad_reaching_turning_started = false;
+            is_chpad_reaching_goto_started = false;
+        }
+        
         if ( cur_state.battery_state <= battery_threshold ){   // Take from communication or state estimator
             std::cout <<" Battery is too low..." << std::endl;
             // Do Go back motion
@@ -439,6 +559,11 @@ int32_t main(int32_t argc, char **argv) {
             FoundFront = false;
             is_record_ori_angle = false;
             is_looking_around_started = false;
+            is_homing_turning_started = false;
+            if ( GOTO_MODE ){
+                GOTO_MODE = false;
+                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);
+            }
 
             if ( is_tg_reaching_turning_started == false ){
                 ori_angle = cur_state.yaw; // Taking from communication
@@ -460,34 +585,80 @@ int32_t main(int32_t argc, char **argv) {
             }
             continue;
         }
-
-        if ( dist_target > -1.0f && ready_to_reach_target ){
-            std::cout <<" Found the target, going to get closer" << std::endl;
-            // Reset flag
-            hasClearPath = false;
-            is_Goto_started = false;
-            hasFront = false;
-            FoundFront = false;
-            is_record_ori_angle = false;
-            is_looking_around_started = false;
-            
-            if ( is_tg_reaching_goto_started == false ){
-                current_angle = cur_state.yaw;
-                Goto(od4, 3.0f * std::cos( current_angle ), 3.0f * std::sin( current_angle ), 0.0f, 0.0f, 5);
-                is_tg_reaching_goto_started = true;
-                continue;
+        else if ( ready_to_reach_target ){
+            if ( dist_target > -1.0f ){
+                std::cout <<" Found the target, going to get closer" << std::endl;
+                // Reset flag
+                hasClearPath = false;
+                is_Goto_started = false;
+                hasFront = false;
+                FoundFront = false;
+                is_record_ori_angle = false;
+                is_looking_around_started = false;
+                is_homing_turning_started = false;
+                
+                if ( is_tg_reaching_goto_started == false ){
+                    current_angle = cur_state.yaw;
+                    Goto(od4, 3.0f * std::cos( current_angle ), 3.0f * std::sin( current_angle ), 0.0f, 0.0f, 5);
+                    is_tg_reaching_goto_started = true;
+                    continue;
+                }
+    
+                if ( dist_target <= 80.0f ){
+                    is_tg_reaching_goto_started = false;    
+                    ready_to_reach_target = false;
+                    std::cout <<" Reach the target, land and stop." << std::endl;
+                    Landing(od4, 0.0f, 3);
+                    Stopping(od4);
+                    break; 
+                }
+                else{
+                    continue;
+                }
             }
-
-            if ( dist_target <= 80.0f ){
-                is_tg_reaching_goto_started = false;    
-                ready_to_reach_target = false;
-                std::cout <<" Reach the target, land and stop." << std::endl;
-                Landing(od4, 0.0f, 3);
-                Stopping(od4);
-                break; 
+        }
+        else{
+            if ( HOMING_MODE && homing_angle != -4.0f ){
+                std::cout <<" Now the battery is low, start to look around left and right to find the target" << std::endl;
+                if ( is_homing_turning_started == false ){
+                    start_turning_angle = cur_state.yaw;
+                    if ( timer_homing_turning == 0 ){
+                        Goto(od4, 0.0f, 0.0f, 0.0f, 120.0f / 180 * M_PI, 5);
+                    }
+                    else if ( timer_homing_turning >= 1 ){
+                        Goto(od4, 0.0f, 0.0f, 0.0f, -120.0f / 180 * M_PI, 5);
+                    }
+                    is_homing_turning_started = true;
+                }
+                else{
+                    if ( std::abs( angleDifference( start_turning_angle, cur_state.yaw ) ) >= 120.0f / 180 * M_PI - 1 / 180.0f * M_PI ){
+                        timer_homing_turning += 1;
+                        is_homing_turning_started = false;
+                        if ( timer_homing_turning > 2 ){
+                            std::cout <<" No target, go back home..." << std::endl;
+                            if ( is_backhome_turning_started == false ){
+                                Goto(od4, 0.0f, 0.0f, 0.0f, wrap_angle(cur_state.yaw - homing_angle), 1);
+                                is_backhome_turning_started = true;
+                            }
+                            else if ( std::abs( angleDifference( homing_angle, cur_state.yaw ) ) <= 5.0f / 180 * M_PI ){
+                                is_backhome_turning_started = false;
+                                if ( is_backhome_goto_started == false ){
+                                    Goto(od4, 0.0f, 0.0f, 0.0f, wrap_angle(cur_state.yaw - homing_angle), 3); 
+                                    is_backhome_goto_started = true;
+                                }                               
+                            }
+                        }
+                    }
+                }                
             }
             else{
-                continue;
+                is_tg_reaching_turning_started = false;
+                is_tg_reaching_goto_started = false;
+                ready_to_reach_target = false;
+                is_homing_turning_started = false;
+                timer_homing_turning = 0;
+                is_backhome_turning_started = false;
+                is_backhome_goto_started = false;
             }
         }
 
@@ -600,7 +771,6 @@ int32_t main(int32_t argc, char **argv) {
                 std::cout <<" Has front, start looping with candidate size:" << angle_dev_candidate_vec.size() << ", and overall vector size:" << angle_dev_vec.size() << std::endl;
                 for(const auto& pair_cand : angle_dev_candidate_vec) {
                     // std::cout <<" current candidate front:" << pair_cand.first << ", angle:" << pair_cand.second << std::endl;
-
                     if ( pre_angle != -5.0f && std::abs( angleDifference( pre_angle, pair_cand.second ) ) <= 10.0f / 180 * M_PI ){
                         // std::cout <<"     Angle diff smaller than 10.0f..." << std::endl;
                         continue;
@@ -636,11 +806,34 @@ int32_t main(int32_t argc, char **argv) {
                         if ( angle_to_turn < 0.0f ){
                             angTurn = angle_to_turn - 5 / 180.0f * M_PI;
                         }
+
+                        // Record current LRstate
+                        pos_LRstate_vec.clear();
+                        for (const auto& pair : angle_dev_vec){
+                            // float angDev = wrap_angle(angleDifference( pair_cand.second, pair.second ));
+                            float angDev = wrap_angle(angleDifference( M_PI / 2.0f, pair.second ));    // For test
+                            posState state;
+                            state.front = pair.first * std::cos( angDev );
+                            if ( pair.first * std::sin( angDev ) > 0.0f ){
+                                state.left = pair.first * std::sin( angDev );
+                                state.right = -1.0f;
+                            }
+                            else{
+                                state.right = std::abs(pair.first * std::sin( angDev ));
+                                state.left = -1.0f;
+                            }
+                            pos_LRstate_vec.insert(pos_LRstate_vec.begin(),state);
+                        }
+                        start_front = front;
+                        start_rear = rear;
+
                         Goto(od4, 0.0f, 0.0f, 0.0f, wrap_angle( angTurn ), 3);
                         std::cout <<" Found a direction to go to, start turning to angle: " << pair_cand.second << " with ang dev: " << angle_to_turn << std::endl;
                         break;
                     }
                 }
+
+                
 
                 if ( FoundFront == false ){
                     FoundFront = true;
@@ -650,6 +843,26 @@ int32_t main(int32_t argc, char **argv) {
                     if ( angle_to_turn < 0.0f ){
                         angTurn = angle_to_turn - 5 / 180.0f * M_PI;
                     }
+
+                    // Record current LRstate
+                    pos_LRstate_vec.clear();
+                    for (const auto& pair : angle_dev_vec){
+                        float angDev = wrap_angle(angleDifference( pre_angle, pair.second ));
+                        posState state;
+                        state.front = pair.first * std::cos( angDev );
+                        if ( pair.first * std::sin( angDev ) > 0.0f ){
+                            state.left = pair.first * std::sin( angDev );
+                            state.right = -1.0f;
+                        }
+                        else{
+                            state.right = std::abs(pair.first * std::sin( angDev ));
+                            state.left = -1.0f;
+                        }
+                        pos_LRstate_vec.insert(pos_LRstate_vec.begin(),state);
+                    }
+                    start_front = front;
+                    start_rear = rear;
+
                     Goto(od4, 0.0f, 0.0f, 0.0f, wrap_angle( angTurn ), 3);
                     std::cout <<" No direction to go to, start turning to the original angle: " << pre_angle << " with ang dev: " << angle_to_turn << std::endl;                
                 }
