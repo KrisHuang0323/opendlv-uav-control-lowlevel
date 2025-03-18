@@ -218,6 +218,11 @@ int32_t main(int32_t argc, char **argv) {
     float safe_endreach_dist = 0.3;
     float cur_distToMove{0.0f};
     int time_toMove = 1;
+    struct preDist {
+        float left,
+        float right
+    }
+    preDist cur_preDist = {-1.0f, -1.0f};
     enum ReachEndType {
         FRONT,
         LEFT,
@@ -367,42 +372,58 @@ int32_t main(int32_t argc, char **argv) {
        if ( front <= safe_endreach_dist + cur_distToMove / time_toMove + 0.1f ){
             if ( cur_pathReachingState.pathOnGoing ){
                 std::cout <<" Front end meets limit." << std::endl;
-                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction 
+                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction
+                cur_reachEndType = FRONT; 
             }           
-            cur_reachEndType = FRONT;
         }
         else if ( left <= safe_endreach_dist ){
+            if ( cur_pathReachingState.pathOnGoing == false && cur_dodgeType == DODGE_NONE ){
+                cur_preDist.left = -1.0f;
+                continue;
+            }
+
+            if ( cur_preDist.left == -1.0f || cur_preDist.left < left ){
+                cur_preDist.left = left;
+                continue;
+            }
+
             if ( cur_validWay.toRight >= safe_endreach_dist + 0.2f && dist_obs == -1.0f ){
                 Goto(od4, 0.2f * std::sin( cur_state.yaw ), - 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
                 continue;
             }
             else{
-                if ( cur_pathReachingState.pathOnGoing || cur_dodgeType == DODGE_RIGHT || cur_dodgeType == DODGE_LEFT ){
-                    std::cout <<" Left end meets limit." << std::endl;
-                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction   
-                }        
-                cur_reachEndType = LEFT;
+                std::cout <<" Left end meets limit." << std::endl;
+                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction  
+                cur_reachEndType = LEFT;      
             }
         }
         else if ( right <= safe_endreach_dist ){
+            if ( cur_pathReachingState.pathOnGoing == false && cur_dodgeType == DODGE_NONE ){
+                cur_preDist.right = -1.0f
+                continue;
+            }
+
+            if ( cur_preDist.right == -1.0f || cur_preDist.right < right ){
+                cur_preDist.right = right;
+                continue;
+            }
+
             if ( cur_validWay.toLeft >= safe_endreach_dist + 0.2f && dist_obs == -1.0f ){
                 Goto(od4, - 0.2f * std::sin( cur_state.yaw ), 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
                 continue;
             }
             else{
-                if ( cur_pathReachingState.pathOnGoing || cur_dodgeType == DODGE_RIGHT || cur_dodgeType == DODGE_LEFT ){
-                    std::cout <<" Right end meets limit." << std::endl;
-                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction  
-                }          
-                cur_reachEndType = RIGHT;
+                std::cout <<" Right end meets limit." << std::endl;
+                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction  
+                cur_reachEndType = RIGHT;      
             }
         }
         else if ( rear <= safe_endreach_dist ){
-            if ( cur_dodgeType == DODGE_REAR ){
+            if ( cur_dodgeType != DODGE_NONE ){
                 std::cout <<" Rear end meets limit." << std::endl;
-                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction  
+                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction
+                cur_reachEndType = REAR;  
             }          
-            cur_reachEndType = REAR;
         }
         else{
             cur_reachEndType = NONE; 
