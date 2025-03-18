@@ -219,8 +219,8 @@ int32_t main(int32_t argc, char **argv) {
     float cur_distToMove{0.0f};
     int time_toMove = 1;
     struct preDist {
-        float left,
-        float right
+        float left;
+        float right;
     }
     preDist cur_preDist = {-1.0f, -1.0f};
     enum ReachEndType {
