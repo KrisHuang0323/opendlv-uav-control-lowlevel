@@ -425,13 +425,13 @@ int32_t main(int32_t argc, char **argv) {
                 if ( cur_validWay.toRight >= safe_endreach_dist + 0.2f ){
                     std::cout <<" Try to dodge to the right..." << std::endl;
                     Goto(od4, 0.2f * std::sin( cur_state.yaw ), - 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
-                    cur_dodgeType = DODGE_RIGHT
+                    cur_dodgeType = DODGE_RIGHT;
                     continue;
                 }
                 else if ( cur_validWay.toLeft >= safe_endreach_dist + 0.4f ){
                     std::cout <<" Try to dodge to the left..." << std::endl;
                     Goto(od4, - 0.4f * std::sin( cur_state.yaw ), 0.4f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
-                    cur_dodgeType = DODGE_LEFT
+                    cur_dodgeType = DODGE_LEFT;
                     continue;
                 }
                 else if ( cur_validWay.toRear >= safe_endreach_dist + 0.2f ){
@@ -444,7 +444,7 @@ int32_t main(int32_t argc, char **argv) {
                 else{
                     std::cout <<" No valid way to dodge to, try to fly up..." << std::endl;
                     Goto(od4, 0.0f, 0.0f, 0.3f, 0.0f, 0, 1, true);
-                    cur_dodgeType = DODGE_UP
+                    cur_dodgeType = DODGE_UP;
                     continue;
                 }
 
@@ -459,13 +459,13 @@ int32_t main(int32_t argc, char **argv) {
                 if ( cur_validWay.toLeft >= safe_endreach_dist + 0.2f ){
                     std::cout <<" Try to dodge to the left..." << std::endl;
                     Goto(od4, - 0.2f * std::sin( cur_state.yaw ), 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
-                    cur_dodgeType = DODGE_LEFT
+                    cur_dodgeType = DODGE_LEFT;
                     continue;
                 }
                 else if ( cur_validWay.toRight >= safe_endreach_dist + 0.4f ){
                     std::cout <<" Try to dodge to the right..." << std::endl;
                     Goto(od4, 0.4f * std::sin( cur_state.yaw ), - 0.4f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
-                    cur_dodgeType = DODGE_RIGHT
+                    cur_dodgeType = DODGE_RIGHT;
                     continue;
                 }
                 else if ( cur_validWay.toRear >= safe_endreach_dist + 0.2f ){
