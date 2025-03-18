@@ -225,7 +225,7 @@ int32_t main(int32_t argc, char **argv) {
     bool is_tg_reaching_turning_started = false;
     bool is_tg_reaching_goto_started = false;
     bool ready_to_reach_target = false;
-    float battery_threshold = 4.5f;
+    float battery_threshold = 3.15f;
     float angle_to_turn{-1.0f};
     float cur_path_front{0.0f};
 
