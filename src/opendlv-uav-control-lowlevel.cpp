@@ -926,7 +926,7 @@ int32_t main(int32_t argc, char **argv) {
                     // Try to refresh the rear distance
                     float rearDist{0.0f};
                     for ( const auto& pair : angleFrontState_vec ){
-                        float angDev = std::abs( angleDifference( pair.angle, pair_cand.angle ) );
+                        float angDev = std::abs( angleDifference( pair.angle, cur_lookAroundState.targetAngle ) );
                         if ( angDev <= 90.0f / 180.0f * M_PI ){
                             continue;;
                         }
@@ -940,7 +940,7 @@ int32_t main(int32_t argc, char **argv) {
 
                     // Record path related information
                     for ( const auto& pair : angleFrontState_vec ){
-                        float angDev = angleDifference( pair_cand.angle, pair.angle );
+                        float angDev = angleDifference( cur_lookAroundState.targetAngle, pair.angle );
                         distPathState pstate = { pair.front*std::cos( angDev ), pair.front*std::sin( angDev ) }; 
                         distPathstate_vec.insert( distPathstate_vec.begin(), pstate );                    
                     }
