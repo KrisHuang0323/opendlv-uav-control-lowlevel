@@ -881,7 +881,7 @@ int32_t main(int32_t argc, char **argv) {
 
                     if ( hasObOnPath == false ){
                         // Found the path, turn to that angle
-                        cur_lookAroundState.targetAngle = cur_lookAroundState.preAngle;
+                        cur_lookAroundState.targetAngle = pair_cand.angle;
 
                         // Try to refresh the rear distance
                         float rearDist{0.0f};
@@ -921,7 +921,7 @@ int32_t main(int32_t argc, char **argv) {
                 // If turning still not starting, we return to previous angle
                 if ( cur_lookAroundState.turnStarted == false ){
                     // Found the path, turn to that angle
-                    cur_lookAroundState.targetAngle = pair_cand.angle;
+                    cur_lookAroundState.targetAngle = cur_lookAroundState.preAngle;
 
                     // Try to refresh the rear distance
                     float rearDist{0.0f};
