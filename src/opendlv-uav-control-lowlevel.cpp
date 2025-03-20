@@ -370,7 +370,7 @@ int32_t main(int32_t argc, char **argv) {
             - Get the range from rangefinder
             - Check whether some ranges reach ends
         */
-       if ( front <= safe_endreach_dist + cur_distToMove / time_toMove + 0.3f ){
+       if ( front <= safe_endreach_dist + cur_distToMove / time_toMove + 0.1f ){
             if ( cur_pathReachingState.pathOnGoing ){
                 std::cout <<" Front end meets limit." << std::endl;
                 Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction
@@ -585,6 +585,7 @@ int32_t main(int32_t argc, char **argv) {
                 std::cout <<" Reach end stop going with front: " << cur_reachEndState.reachFront << ", left: " << cur_reachEndState.reachLeft << ", right: " << cur_reachEndState.reachRight << std::endl;
                 cur_pathReachingState.pathReadyToGo = false;
                 cur_pathReachingState.pathOnGoing = false;
+                cur_targetCheckState.targetAngle = -1.0f;
             }
         }
 
@@ -600,9 +601,9 @@ int32_t main(int32_t argc, char **argv) {
             if ( cur_pathReachingState.pathOnGoing == false ){
                 std::cout <<" Start go to action..." << std::endl;
                 cur_distToMove = front;
-                if ( cur_state.battery_state <= homing_batterythreshold ){
-                    cur_distToMove = 0.8f;
-                }
+                // if ( cur_state.battery_state <= homing_batterythreshold ){
+                //     cur_distToMove = 0.8f;
+                // }
                 time_toMove = 5;
                 Goto(od4, cur_distToMove * std::cos( cur_state.yaw ), cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);
                 cur_pathReachingState.pathOnGoing = true;
@@ -617,6 +618,7 @@ int32_t main(int32_t argc, char **argv) {
                     // Reset flags
                     cur_pathReachingState.pathOnGoing = false;
                     cur_pathReachingState.pathReadyToGo = false;
+                    cur_targetCheckState.targetAngle = -1.0f;
                 }
                 else if ( cur_state.battery_state <= homing_batterythreshold && std::abs( cur_pathReachingState.startFront - front ) >= 0.8f ){
                     // Reach the target, stop current action
@@ -626,6 +628,7 @@ int32_t main(int32_t argc, char **argv) {
                     // Reset flags
                     cur_pathReachingState.pathOnGoing = false;
                     cur_pathReachingState.pathReadyToGo = false;
+                    cur_targetCheckState.targetAngle = -1.0f;
                 }
                 else if ( std::abs( cur_pathReachingState.startFront - front ) >= cur_distToMove ){
                     // Reach the target, stop current action
@@ -635,6 +638,7 @@ int32_t main(int32_t argc, char **argv) {
                     // Reset flags
                     cur_pathReachingState.pathOnGoing = false;
                     cur_pathReachingState.pathReadyToGo = false;
+                    cur_targetCheckState.targetAngle = -1.0f;
                 }
             }
             continue;
@@ -706,9 +710,9 @@ int32_t main(int32_t argc, char **argv) {
                     // Check for clear path
                     bool hasObOnPath = false; 
                     for ( const auto& pair_cand : angleFrontState_vec ){
-                        if ( pair_cand.front <= safe_endreach_dist ){
-                            continue;
-                        }
+                        // if ( pair_cand.front <= safe_endreach_dist ){
+                        //     continue;
+                        // }
 
                         float angMin = std::abs( std::atan2( 0.1f, pair_cand.front ) );
                         hasObOnPath = false;
@@ -782,7 +786,6 @@ int32_t main(int32_t argc, char **argv) {
                     // Reset other flags
                     cur_targetCheckState.turnStarted = false;
                     cur_targetCheckState.clearPathCheckStarted = false;
-                    cur_targetCheckState.targetAngle = -1.0f;
                 }
                 continue;
             }    
@@ -853,9 +856,9 @@ int32_t main(int32_t argc, char **argv) {
                 std::cout <<" Start path checking..." << std::endl;
                 bool hasObOnPath = false; 
                 for ( const auto& pair_cand : angleFrontState_vec ){
-                    if ( pair_cand.front <= safe_endreach_dist ){
-                        continue;
-                    }
+                    // if ( pair_cand.front <= safe_endreach_dist ){
+                    //     continue;
+                    // }
 
                     if ( std::abs( angleDifference( cur_lookAroundState.preAngle, pair_cand.angle ) ) <= 10.0f / 180 * M_PI ){
                         continue;
@@ -903,7 +906,7 @@ int32_t main(int32_t argc, char **argv) {
                             float angDev = angleDifference( cur_lookAroundState.targetAngle, pair.angle );
                             distPathState pstate = { pair.front*std::cos( angDev ), pair.front*std::sin( angDev ) }; 
                             distPathstate_vec.insert( distPathstate_vec.begin(), pstate ); 
-                            std::cout <<" Try to print distance path state with on path: " << pstate.dist_valid_onPath << ", and dev path: " << pstate.dist_valid_devPath << std::endl;                  
+                            // std::cout <<" Try to print distance path state with on path: " << pstate.dist_valid_onPath << ", and dev path: " << pstate.dist_valid_devPath << std::endl;                  
                         }
 
                         // Try to turn to the angle
@@ -912,7 +915,7 @@ int32_t main(int32_t argc, char **argv) {
                             angTurn -= 10.0f / 180.0f * M_PI;
                         }
                         Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 3);
-                        std::cout <<" No path to go to so start turning to the previous target angle with target: " << cur_lookAroundState.targetAngle << std::endl;
+                        std::cout <<" Found a path to go to and start turning to target angle with target: " << cur_lookAroundState.targetAngle << std::endl;
                         cur_lookAroundState.turnStarted = true;
                         break;
                     }
@@ -951,7 +954,7 @@ int32_t main(int32_t argc, char **argv) {
                         angTurn -= 10.0f / 180.0f * M_PI;
                     }
                     Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 3);
-                    std::cout <<" Found a path to go to and start turning to target angle with target: " << cur_lookAroundState.targetAngle << std::endl;
+                    std::cout <<" No path to go to so start turning to the previous target angle with target: " << cur_lookAroundState.targetAngle << std::endl;
                     cur_lookAroundState.turnStarted = true;
                 }
             }
@@ -965,6 +968,7 @@ int32_t main(int32_t argc, char **argv) {
             else{
                 // Ready to go to path
                 std::cout <<" Turn to the target angle, ready to go to it..." << std::endl;
+                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0);
                 cur_pathReachingState.pathReadyToGo = true;
                 ori_front = front;
                 ori_rear = rear;
