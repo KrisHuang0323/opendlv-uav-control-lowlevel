@@ -836,7 +836,7 @@ int32_t main(int32_t argc, char **argv) {
             }
             cur_lookAroundState.startAngle = cur_state.yaw;
             cur_lookAroundState.preAngle = cur_state.yaw + M_PI;
-            Goto(od4, 0.0f, 0.0f, 0.0f, 90.0f / 180.0f * M_PI, 3);
+            Goto(od4, 0.0f, 0.0f, 0.0f, 100.0f / 180.0f * M_PI, 3);
             cur_lookAroundState.clearPathCheckStarted = true;
         }
         else if ( cur_lookAroundState.turnStarted == false ){
