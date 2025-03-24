@@ -234,12 +234,9 @@ int32_t main(int32_t argc, char **argv) {
     ReachEndState cur_reachEndState = { false, false, false, false };
 
     // Variables for dynamic obstacles avoidance
-    struct Range {
-        float left;
-        float right;
-    };
-    Range ori_dodgeRange = {-1.0f, -1.0f};
-    bool has_recordOriRange = false;
+    float dodgeDist{0.0f};
+    float dodgeDist_UP{0.0f};
+    bool has_dodgeToRear = false;
     enum DodgeType {
         DODGE_LEFT,
         DODGE_RIGHT,
@@ -316,12 +313,11 @@ int32_t main(int32_t argc, char **argv) {
         */
         if ( distPathstate_vec.size() > 0 ){
             float cur_dist_onPath = front - ori_front;
-            float cur_dist_onPath_rear = rear - ori_front;
-            cur_validWay.toRear += cur_dist_onPath_rear;
             for ( auto& state : distPathstate_vec ){
-                if ( std::abs( state.dist_valid_onPath - cur_dist_onPath ) <= 0.01f ){
+                if ( std::abs( state.dist_valid_onPath - cur_dist_onPath ) > 0.01f ){
                     continue;
                 }
+                // std::cout <<" Distance to be modified, right: " << right << ", left: " << left << ", path progress: " << std::abs( state.dist_valid_onPath - cur_dist_onPath ) << std::endl; 
 
                 if ( state.dist_valid_devPath <= 0.0f ){
                     state.dist_valid_devPath = -right;
@@ -343,29 +339,34 @@ int32_t main(int32_t argc, char **argv) {
         // Start valid way checking
         if ( distPathstate_vec.size() > 0 ){
             float cur_dist_onPath = front - ori_front;
-            float toLeft{-1.0f};
-            float toRight{-1.0f};
+            float toLeft{4.0f};
+            float toRight{4.0f};
             for ( auto& state : distPathstate_vec ){
                 // While some path in Crazyflie range
                 if ( std::abs( state.dist_valid_onPath - cur_dist_onPath ) > 0.1f ){
                     continue;
                 }
+                // std::cout <<" Valid distance to check, devPath: " << state.dist_valid_devPath << ", path progress: " << std::abs( state.dist_valid_onPath - cur_dist_onPath ) << std::endl; 
 
                 if ( state.dist_valid_devPath > 0.0f ){
-                    if ( std::abs( state.dist_valid_devPath ) > toLeft ){
+                    if ( std::abs( state.dist_valid_devPath ) < toLeft ){
                         toLeft = std::abs( state.dist_valid_devPath );
                     }
                 }
                 else{
-                    if ( std::abs( state.dist_valid_devPath ) > toRight ){
+                    if ( std::abs( state.dist_valid_devPath ) < toRight ){
                         toRight = std::abs( state.dist_valid_devPath );
                     }
                 }
             }
 
             // Set current valid way to the state
-            cur_validWay.toLeft = toLeft;
-            cur_validWay.toRight = toRight;
+            if ( toLeft != 4.0f ){
+                cur_validWay.toLeft = toLeft;
+            }
+            if ( toRight != 4.0f ){
+                cur_validWay.toRight = toRight;
+            }
             // std::cout <<" Valid way checking start... with left " << cur_validWay.toLeft << ", with right: " << cur_validWay.toRight << std::endl;
         }
 
@@ -445,7 +446,7 @@ int32_t main(int32_t argc, char **argv) {
             cur_reachEndState.reachRight = false;
         }
 
-        if ( rear <= safe_endreach_dist ){
+        if ( rear <= safe_endreach_dist + cur_distToMove / time_toMove + 0.1f ){
             if ( cur_dodgeType != DODGE_NONE ){
                 std::cout <<" Rear end meets limit." << std::endl;
                 Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction
@@ -462,12 +463,7 @@ int32_t main(int32_t argc, char **argv) {
             - Use current valid way to dodge away from the obstacle
         */
         if ( dist_obs <= 250.0f && dist_obs > -1.0f ){    // Means that some obstacles approach
-            // Record original range
-            if ( has_recordOriRange == false ){
-                ori_dodgeRange.left = left;
-                ori_dodgeRange.right = right;
-                has_recordOriRange = true;
-            }
+            std::cout <<" Has dynamic obstacles with to left: " << cur_validWay.toLeft << ", to right: " << cur_validWay.toRight << ", to rear: " << cur_validWay.toRear << std::endl; 
 
             // While some ends are reached, simply fly up until the obstacle go away
             bool hasReachEnd = false;
@@ -477,74 +473,84 @@ int32_t main(int32_t argc, char **argv) {
             if ( hasReachEnd && cur_dodgeType == DODGE_NONE ){
                 std::cout <<" Some ends meet limit go up... " << std::endl; 
                 Goto(od4, 0.0f, 0.0f, 0.3f, 0.0f, 0, 1, true);
+                has_dodgeToRear = false;
+                dodgeDist_UP -= 0.3f;
                 cur_dodgeType = DODGE_UP;
                 continue;
             }
 
             // Check if the obstacle is on the left or right side
             if ( aimDirection_obs >= 0.0f ){
-                // If we have dodge away, simply wait and do nothing
-                if ( cur_dodgeType != DODGE_REAR && cur_dodgeType != DODGE_NONE){
-                    continue;
-                }
-
                 // If right side has valid way, dodge to it
                 if ( cur_validWay.toRight >= safe_endreach_dist + 0.2f ){
+                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
                     std::cout <<" Try to dodge to the right..." << std::endl;
                     Goto(od4, 0.2f * std::sin( cur_state.yaw ), - 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
+                    dodgeDist -= 0.2f;
                     cur_dodgeType = DODGE_RIGHT;
                     continue;
                 }
                 else if ( cur_validWay.toLeft >= safe_endreach_dist + 0.4f ){
+                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
                     std::cout <<" Try to dodge to the left..." << std::endl;
                     Goto(od4, - 0.4f * std::sin( cur_state.yaw ), 0.4f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
+                    dodgeDist += 0.4f;
                     cur_dodgeType = DODGE_LEFT;
                     continue;
                 }
-                else if ( cur_validWay.toRear >= safe_endreach_dist + 0.2f ){
+                else if ( cur_validWay.toRear >= safe_endreach_dist + 0.2f && has_dodgeToRear == false ){
+                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
                     std::cout <<" Try to dodge to the rear..." << std::endl;
-                    Goto(od4, - 0.2f * std::cos( cur_state.yaw ), - 0.2f * std::sin( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
+                    cur_distToMove = cur_validWay.toRear;
+                    time_toMove = 5;
+                    Goto(od4, - cur_distToMove * std::cos( cur_state.yaw ), - cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
                     cur_dodgeType = DODGE_REAR;
-                    has_recordOriRange = false;
+                    has_dodgeToRear = true;
                     continue;
                 }
                 else{
+                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
                     std::cout <<" No valid way to dodge to, try to fly up..." << std::endl;
                     Goto(od4, 0.0f, 0.0f, 0.3f, 0.0f, 0, 1, true);
+                    dodgeDist_UP -= 0.3f;
                     cur_dodgeType = DODGE_UP;
                     continue;
                 }
 
             }
             else{
-                // If we have dodge away, simply wait and do nothing
-                if ( cur_dodgeType != DODGE_REAR && cur_dodgeType != DODGE_NONE){
-                    continue;
-                }
-
                 // If left side has valid way, dodge to it
                 if ( cur_validWay.toLeft >= safe_endreach_dist + 0.2f ){
+                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
                     std::cout <<" Try to dodge to the left..." << std::endl;
                     Goto(od4, - 0.2f * std::sin( cur_state.yaw ), 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
+                    dodgeDist += 0.2f;
                     cur_dodgeType = DODGE_LEFT;
                     continue;
                 }
                 else if ( cur_validWay.toRight >= safe_endreach_dist + 0.4f ){
+                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
                     std::cout <<" Try to dodge to the right..." << std::endl;
                     Goto(od4, 0.4f * std::sin( cur_state.yaw ), - 0.4f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
+                    dodgeDist -= 0.4f;
                     cur_dodgeType = DODGE_RIGHT;
                     continue;
                 }
-                else if ( cur_validWay.toRear >= safe_endreach_dist + 0.2f ){
+                else if ( cur_validWay.toRear >= safe_endreach_dist + 0.2f && has_dodgeToRear == false ){
+                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
                     std::cout <<" Try to dodge to the rear..." << std::endl;
-                    Goto(od4, - 0.2f * std::cos( cur_state.yaw ), - 0.2f * std::sin( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying rear to dodge
+                    cur_distToMove = cur_validWay.toRear;
+                    time_toMove = 5;
+                    Goto(od4, - cur_distToMove * std::cos( cur_state.yaw ), - cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
                     cur_dodgeType = DODGE_REAR;
-                    has_recordOriRange = false;
+                    has_dodgeToRear = true;
                     continue;
                 }
                 else{
+                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
                     std::cout <<" No valid way to dodge to, try to fly up..." << std::endl;
                     Goto(od4, 0.0f, 0.0f, 0.3f, 0.0f, 0, 1, true);
+                    dodgeDist_UP -= 0.3f;
                     cur_dodgeType = DODGE_UP;
                     continue;
                 }
@@ -552,25 +558,20 @@ int32_t main(int32_t argc, char **argv) {
         }
         else if ( cur_dodgeType != DODGE_NONE ){
             // Go back to the original position while the obstacle is gone
-            float devPath = left - ori_dodgeRange.left;
-            if ( cur_dodgeType == DODGE_UP ){
+            if ( dodgeDist_UP != 0.0f ){
                 std::cout <<" No obs, try to fly down..." << std::endl;
-                Goto(od4, 0.0f, 0.0f, -0.3f, 0.0f, 0, 1, true);
+                Goto(od4, 0.0f, 0.0f, dodgeDist_UP, 0.0f, 0, 1, true);
             }
-            else{
-                if ( devPath <= 0.0f ){
-                    std::cout <<" No obs, try to fly back to right..." << std::endl;
-                    Goto(od4, std::abs(devPath) * std::sin( cur_state.yaw ), - std::abs(devPath) * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true); 
-                }
-                else{
-                    std::cout <<" No obs, try to fly back to left..." << std::endl;
-                    Goto(od4, - devPath * std::sin( cur_state.yaw ), devPath * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);  
-                }
+            if ( dodgeDist != 0.0f ){
+                std::cout <<" No obs, try to fly back..." << std::endl;
+                Goto(od4, dodgeDist * std::sin( cur_state.yaw ), - dodgeDist * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);
             }
 
             // Reset flags
+            dodgeDist_UP = 0.0f;
+            dodgeDist = 0.0f;
             cur_dodgeType = DODGE_NONE; 
-            has_recordOriRange = false;
+            has_dodgeToRear = false;
             has_possibleInterrupt = true;
         }
 
@@ -755,14 +756,14 @@ int32_t main(int32_t argc, char **argv) {
                             cur_targetCheckState.targetAngle = pair_cand.angle;
     
                             // Try to refresh the rear distance
-                            float rearDist{0.0f};
+                            float rearDist{-1.0f};
                             for ( const auto& pair : angleFrontState_vec ){
-                                float angDev = std::abs( angleDifference( pair.angle, pair_cand.angle ) );
+                                float angDev = std::abs( angleDifference( pair.angle, cur_lookAroundState.targetAngle ) );
                                 if ( angDev <= 90.0f / 180.0f * M_PI ){
                                     continue;;
                                 }
                                 else{
-                                    if ( std::abs( pair.front * std::cos( angDev ) ) > rearDist ){
+                                    if ( std::abs( pair.front * std::cos( angDev ) ) < rearDist || rearDist == -1.0f ){
                                         rearDist = std::abs( pair.front * std::cos( angDev ) );
                                     }
                                 }                        
@@ -913,16 +914,17 @@ int32_t main(int32_t argc, char **argv) {
                     if ( hasObOnPath == false ){
                         // Found the path, turn to that angle
                         cur_lookAroundState.targetAngle = pair_cand.angle;
+                        // cur_lookAroundState.targetAngle = 90.0f / 180.0f * M_PI;
 
                         // Try to refresh the rear distance
-                        float rearDist{0.0f};
+                        float rearDist{-1.0f};
                         for ( const auto& pair : angleFrontState_vec ){
                             float angDev = std::abs( angleDifference( pair.angle, cur_lookAroundState.targetAngle ) );
                             if ( angDev <= 90.0f / 180.0f * M_PI ){
-                                continue;;
+                                continue;
                             }
                             else{
-                                if ( std::abs( pair.front * std::cos( angDev ) ) > rearDist ){
+                                if ( std::abs( pair.front * std::cos( angDev ) ) < rearDist || rearDist == -1.0f ){
                                     rearDist = std::abs( pair.front * std::cos( angDev ) );
                                 }
                             }                        
@@ -955,14 +957,14 @@ int32_t main(int32_t argc, char **argv) {
                     cur_lookAroundState.targetAngle = cur_lookAroundState.preAngle;
 
                     // Try to refresh the rear distance
-                    float rearDist{0.0f};
+                    float rearDist{-1.0f};
                     for ( const auto& pair : angleFrontState_vec ){
                         float angDev = std::abs( angleDifference( pair.angle, cur_lookAroundState.targetAngle ) );
                         if ( angDev <= 90.0f / 180.0f * M_PI ){
                             continue;;
                         }
                         else{
-                            if ( std::abs( pair.front * std::cos( angDev ) ) > rearDist ){
+                            if ( std::abs( pair.front * std::cos( angDev ) ) < rearDist || rearDist == -1.0f ){
                                 rearDist = std::abs( pair.front * std::cos( angDev ) );
                             }
                         }                        
@@ -988,6 +990,9 @@ int32_t main(int32_t argc, char **argv) {
             }
         }
         else{
+            // // For test
+            // ori_front = front;
+            // continue;
             if ( std::abs( angleDifference( cur_lookAroundState.targetAngle, cur_state.yaw ) ) >= 5.0f / 180.0f * M_PI ){
                 // continue turning
                 // std::cout <<" Keep turning to that angle..." << std::endl;
