@@ -214,6 +214,8 @@ int32_t main(int32_t argc, char **argv) {
         float toRear;
     };
     ValidWay cur_validWay = {-1.0f, -1.0f, -1.0f};
+    bool on_GoTO_MODE = false;
+    bool on_TURNING_MODE = false;
 
     // Variables for static obstacles avoidance
     float safe_endreach_dist = 0.3;
@@ -309,14 +311,55 @@ int32_t main(int32_t argc, char **argv) {
         }
 
         /*
-            Refresh valid left/right/rear on the way
+            Valid direction check
+            - Check from the range recording array
         */
-        if ( distPathstate_vec.size() > 0 ){
+        // Recheck current dist path vector if in turning mode
+        if ( on_TURNING_MODE && angleFrontState_vec.size() > 0 ){
+            // Try to refresh the rear distance
+            float rearDist{-1.0f};
+            float angMin = std::abs( std::atan2( 0.1f, front ) );
+            for ( const auto& pair : angleFrontState_vec ){
+                // std::cout <<" Current angle to check, angle: " << pair.angle << ", front: " << pair.front << std::endl; 
+                float angDev = std::abs( angleDifference( pair.angle, cur_state.yaw ) );
+                if ( angDev >= 135.0f / 180.0f * M_PI ){
+                    if ( pair.front * std::sin( angDev ) > 0.1f ){
+                        continue;
+                    }
+                }  
+                else if ( angDev < 135.0f / 180.0f * M_PI ){
+                    continue;
+                }
+
+                if ( std::abs( pair.front * std::cos( angDev ) ) < rearDist || rearDist == -1.0f ){
+                    rearDist = std::abs( pair.front * std::cos( angDev ) );
+                }                   
+            }
+            cur_validWay.toRear = rearDist;
+
+            // Record path related information
+            ori_front = front;
+            ori_rear = rear;
+            if ( distPathstate_vec.size() > 0 ){
+                distPathstate_vec.clear();
+            }
+            for ( const auto& pair : angleFrontState_vec ){
+                float angDev = angleDifference( cur_state.yaw, pair.angle );
+                // std::cout <<" Current angle difference: " << angDev << ", front: " <<pair.front << ", current angle: " << cur_state.yaw << std::endl; 
+                // std::cout <<" Cosine(On Path): " << pair.front*std::cos( angDev ) << ", Sine(Dev Path): " << pair.front*std::sin( angDev ) << std::endl; 
+                distPathState pstate = { pair.front*std::cos( angDev ), pair.front*std::sin( angDev ) }; 
+                distPathstate_vec.insert( distPathstate_vec.begin(), pstate );              
+            }
+        }
+
+        // Refresh valid left/right/rear on the way
+        if ( distPathstate_vec.size() > 0 && on_GoTO_MODE ){
             float cur_dist_onPath = front - ori_front;
             for ( auto& state : distPathstate_vec ){
                 if ( std::abs( state.dist_valid_onPath - cur_dist_onPath ) > 0.01f ){
                     continue;
                 }
+                // std::cout << "Current path progress: " << cur_dist_onPath << " with original devPath:" << state.dist_valid_devPath << ", left: " << left << ", right: " << right << std::endl;
                 // std::cout <<" Distance to be modified, right: " << right << ", left: " << left << ", path progress: " << std::abs( state.dist_valid_onPath - cur_dist_onPath ) << std::endl; 
 
                 if ( state.dist_valid_devPath <= 0.0f ){
@@ -326,27 +369,30 @@ int32_t main(int32_t argc, char **argv) {
                     state.dist_valid_devPath = left; 
                 }
             }
-        }
 
-        /*
-            Valid direction check
-            - Check from the range recording array
-        */
-        // Reset valid way array 
-        cur_validWay.toLeft = -1.0f;
-        cur_validWay.toRight = -1.0f;
+            // Refresh rear
+            cur_dist_onPath = rear - ori_rear;
+            cur_validWay.toRear += cur_dist_onPath;
+            ori_rear = rear;
+            // std::cout <<" Refresh distpath on goto mode with rear: " << cur_validWay.toRear << std::endl;
+        }
 
         // Start valid way checking
         if ( distPathstate_vec.size() > 0 ){
+            cur_validWay.toLeft = -1.0f;
+            cur_validWay.toRight = -1.0f;
+
             float cur_dist_onPath = front - ori_front;
             float toLeft{4.0f};
             float toRight{4.0f};
             for ( auto& state : distPathstate_vec ){
+                // std::cout <<" Current front diff, front: " << front << ", original front: "<< ori_front << std::endl; 
+                // std::cout <<" Distance to check, state on path:" << state.dist_valid_onPath << std::endl; 
+                
                 // While some path in Crazyflie range
                 if ( std::abs( state.dist_valid_onPath - cur_dist_onPath ) > 0.1f ){
                     continue;
                 }
-                // std::cout <<" Valid distance to check, devPath: " << state.dist_valid_devPath << ", path progress: " << std::abs( state.dist_valid_onPath - cur_dist_onPath ) << std::endl; 
 
                 if ( state.dist_valid_devPath > 0.0f ){
                     if ( std::abs( state.dist_valid_devPath ) < toLeft ){
@@ -367,7 +413,7 @@ int32_t main(int32_t argc, char **argv) {
             if ( toRight != 4.0f ){
                 cur_validWay.toRight = toRight;
             }
-            // std::cout <<" Valid way checking start... with left " << cur_validWay.toLeft << ", with right: " << cur_validWay.toRight << std::endl;
+            // std::cout <<" Valid way checking start... with left " << cur_validWay.toLeft << ", with right: " << cur_validWay.toRight << ", with rear: " << cur_validWay.toRear << ", and current angle: " << cur_state.yaw << std::endl;
         }
 
         /*
@@ -487,6 +533,7 @@ int32_t main(int32_t argc, char **argv) {
                     std::cout <<" Try to dodge to the right..." << std::endl;
                     Goto(od4, 0.2f * std::sin( cur_state.yaw ), - 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
                     dodgeDist -= 0.2f;
+                    on_GoTO_MODE = false;
                     cur_dodgeType = DODGE_RIGHT;
                     continue;
                 }
@@ -495,6 +542,7 @@ int32_t main(int32_t argc, char **argv) {
                     std::cout <<" Try to dodge to the left..." << std::endl;
                     Goto(od4, - 0.4f * std::sin( cur_state.yaw ), 0.4f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
                     dodgeDist += 0.4f;
+                    on_GoTO_MODE = false;
                     cur_dodgeType = DODGE_LEFT;
                     continue;
                 }
@@ -504,6 +552,7 @@ int32_t main(int32_t argc, char **argv) {
                     cur_distToMove = cur_validWay.toRear;
                     time_toMove = 5;
                     Goto(od4, - cur_distToMove * std::cos( cur_state.yaw ), - cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
+                    on_GoTO_MODE = true;
                     cur_dodgeType = DODGE_REAR;
                     has_dodgeToRear = true;
                     continue;
@@ -513,6 +562,7 @@ int32_t main(int32_t argc, char **argv) {
                     std::cout <<" No valid way to dodge to, try to fly up..." << std::endl;
                     Goto(od4, 0.0f, 0.0f, 0.3f, 0.0f, 0, 1, true);
                     dodgeDist_UP -= 0.3f;
+                    on_GoTO_MODE = false;
                     cur_dodgeType = DODGE_UP;
                     continue;
                 }
@@ -525,6 +575,7 @@ int32_t main(int32_t argc, char **argv) {
                     std::cout <<" Try to dodge to the left..." << std::endl;
                     Goto(od4, - 0.2f * std::sin( cur_state.yaw ), 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
                     dodgeDist += 0.2f;
+                    on_GoTO_MODE = false;
                     cur_dodgeType = DODGE_LEFT;
                     continue;
                 }
@@ -533,6 +584,7 @@ int32_t main(int32_t argc, char **argv) {
                     std::cout <<" Try to dodge to the right..." << std::endl;
                     Goto(od4, 0.4f * std::sin( cur_state.yaw ), - 0.4f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
                     dodgeDist -= 0.4f;
+                    on_GoTO_MODE = false;
                     cur_dodgeType = DODGE_RIGHT;
                     continue;
                 }
@@ -542,6 +594,7 @@ int32_t main(int32_t argc, char **argv) {
                     cur_distToMove = cur_validWay.toRear;
                     time_toMove = 5;
                     Goto(od4, - cur_distToMove * std::cos( cur_state.yaw ), - cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
+                    on_GoTO_MODE = true;
                     cur_dodgeType = DODGE_REAR;
                     has_dodgeToRear = true;
                     continue;
@@ -551,6 +604,7 @@ int32_t main(int32_t argc, char **argv) {
                     std::cout <<" No valid way to dodge to, try to fly up..." << std::endl;
                     Goto(od4, 0.0f, 0.0f, 0.3f, 0.0f, 0, 1, true);
                     dodgeDist_UP -= 0.3f;
+                    on_GoTO_MODE = false;
                     cur_dodgeType = DODGE_UP;
                     continue;
                 }
@@ -572,6 +626,7 @@ int32_t main(int32_t argc, char **argv) {
             dodgeDist = 0.0f;
             cur_dodgeType = DODGE_NONE; 
             has_dodgeToRear = false;
+            on_GoTO_MODE = false;
             has_possibleInterrupt = true;
         }
 
@@ -594,6 +649,7 @@ int32_t main(int32_t argc, char **argv) {
                 cur_pathReachingState.pathReadyToGo = false;
                 cur_pathReachingState.pathOnGoing = false;
                 cur_targetCheckState.targetAngle = -1.0f;
+                on_GoTO_MODE = false;
             }
         }
 
@@ -602,6 +658,7 @@ int32_t main(int32_t argc, char **argv) {
             std::cout <<" Being interrupted and try to go again..." << std::endl;
             cur_pathReachingState.pathOnGoing = false;
             has_possibleInterrupt = false;
+            on_GoTO_MODE = false;
         }
 
         // Go to path
@@ -616,6 +673,7 @@ int32_t main(int32_t argc, char **argv) {
                 Goto(od4, cur_distToMove * std::cos( cur_state.yaw ), cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);
                 cur_pathReachingState.pathOnGoing = true;
                 cur_pathReachingState.startFront = front;
+                on_GoTO_MODE = true;
             }
             else{
                 if ( dist_to_reach > -1.0f && dist_to_reach <= 80.0f ){
@@ -627,6 +685,7 @@ int32_t main(int32_t argc, char **argv) {
                     cur_pathReachingState.pathOnGoing = false;
                     cur_pathReachingState.pathReadyToGo = false;
                     cur_targetCheckState.targetAngle = -1.0f;
+                    on_GoTO_MODE = false;
                 }
                 else if ( cur_state.battery_state <= homing_batterythreshold && std::abs( cur_pathReachingState.startFront - front ) >= 0.8f && cur_targetCheckState.targetAngle == -1.0f ){
                     // Reach the target, stop current action
@@ -636,6 +695,7 @@ int32_t main(int32_t argc, char **argv) {
                     // Reset flags
                     cur_pathReachingState.pathOnGoing = false;
                     cur_pathReachingState.pathReadyToGo = false;
+                    on_GoTO_MODE = false;
                 }
                 else if ( std::abs( cur_pathReachingState.startFront - front ) >= cur_distToMove ){
                     // Reach the target, stop current action
@@ -646,6 +706,7 @@ int32_t main(int32_t argc, char **argv) {
                     cur_pathReachingState.pathOnGoing = false;
                     cur_pathReachingState.pathReadyToGo = false;
                     cur_targetCheckState.targetAngle = -1.0f;
+                    on_GoTO_MODE = false;
                 }
             }
             continue;
@@ -666,6 +727,7 @@ int32_t main(int32_t argc, char **argv) {
                 cur_targetCheckState.clearPathCheckStarted = false;
                 cur_targetCheckState.targetAngle = -1.0f;
                 has_possibleInterrupt = false;
+                on_TURNING_MODE = false;
             }
         }
 
@@ -675,6 +737,7 @@ int32_t main(int32_t argc, char **argv) {
                 std::cout <<" Since some targets found, reset look around..." << std::endl;            
                 cur_lookAroundState.turnStarted = false;
                 cur_lookAroundState.clearPathCheckStarted = false;
+                on_TURNING_MODE = false;
             }
         }
 
@@ -691,6 +754,7 @@ int32_t main(int32_t argc, char **argv) {
                 cur_targetCheckState.clearPathCheckStarted = true;
                 cur_targetCheckState.startAngle = cur_state.yaw;
                 cur_targetCheckState.targetAngle = cur_state.yaw + aimDirection_to_reach;
+                on_TURNING_MODE = true;
                 continue;
             }
             else if ( cur_targetCheckState.turnStarted == false ){
@@ -755,27 +819,26 @@ int32_t main(int32_t argc, char **argv) {
                             // Found the path, turn to that angle
                             cur_targetCheckState.targetAngle = pair_cand.angle;
     
-                            // Try to refresh the rear distance
-                            float rearDist{-1.0f};
-                            for ( const auto& pair : angleFrontState_vec ){
-                                float angDev = std::abs( angleDifference( pair.angle, cur_lookAroundState.targetAngle ) );
-                                if ( angDev <= 90.0f / 180.0f * M_PI ){
-                                    continue;;
-                                }
-                                else{
-                                    if ( std::abs( pair.front * std::cos( angDev ) ) < rearDist || rearDist == -1.0f ){
-                                        rearDist = std::abs( pair.front * std::cos( angDev ) );
-                                    }
-                                }                        
-                            }
-                            cur_validWay.toRear = rearDist;
-
-                            // Record path related information
-                            for ( const auto& pair : angleFrontState_vec ){
-                                float angDev = angleDifference( pair_cand.angle, pair.angle );
-                                distPathState pstate = { pair.front*std::cos( angDev ), pair.front*std::sin( angDev ) }; 
-                                distPathstate_vec.insert( distPathstate_vec.begin(), pstate );                    
-                            }
+                            // // Try to refresh the rear distance
+                            // float rearDist{-1.0f};
+                            // for ( const auto& pair : angleFrontState_vec ){
+                            //     float angDev = std::abs( angleDifference( pair.angle, cur_lookAroundState.targetAngle ) );
+                            //     if ( angDev <= 90.0f / 180.0f * M_PI ){
+                            //         continue;;
+                            //     }
+                            //     else{
+                            //         if ( std::abs( pair.front * std::cos( angDev ) ) < rearDist || rearDist == -1.0f ){
+                            //             rearDist = std::abs( pair.front * std::cos( angDev ) );
+                            //         }
+                            //     }                        
+                            // }
+                            // cur_validWay.toRear = rearDist;
+                            // // Record path related information
+                            // for ( const auto& pair : angleFrontState_vec ){
+                            //     float angDev = angleDifference( pair_cand.angle, pair.angle );
+                            //     distPathState pstate = { pair.front*std::cos( angDev ), pair.front*std::sin( angDev ) }; 
+                            //     distPathstate_vec.insert( distPathstate_vec.begin(), pstate );                    
+                            // }
     
                             // Try to turn to the angle
                             float angTurn = angleDifference( cur_state.yaw, cur_targetCheckState.targetAngle ) + 5.0f / 180.0f * M_PI;
@@ -790,7 +853,7 @@ int32_t main(int32_t argc, char **argv) {
                 } 
                 continue;
             }
-            else{
+            else{    
                 if ( std::abs( angleDifference( cur_targetCheckState.targetAngle, cur_state.yaw ) ) >= 5.0f / 180.0f * M_PI ){
                     // continue turning
                     continue;
@@ -805,6 +868,7 @@ int32_t main(int32_t argc, char **argv) {
                     // Reset other flags
                     cur_targetCheckState.turnStarted = false;
                     cur_targetCheckState.clearPathCheckStarted = false;
+                    on_TURNING_MODE = false;
                 }
                 continue;
             }    
@@ -823,6 +887,7 @@ int32_t main(int32_t argc, char **argv) {
                 cur_lookAroundState.turnStarted = false;
                 cur_lookAroundState.clearPathCheckStarted = false;
                 has_possibleInterrupt = false;
+                on_TURNING_MODE = false;
             }
         }
 
@@ -839,6 +904,7 @@ int32_t main(int32_t argc, char **argv) {
             cur_lookAroundState.preAngle = cur_state.yaw + M_PI;
             Goto(od4, 0.0f, 0.0f, 0.0f, 100.0f / 180.0f * M_PI, 3);
             cur_lookAroundState.clearPathCheckStarted = true;
+            on_TURNING_MODE = true;
         }
         else if ( cur_lookAroundState.turnStarted == false ){
             if ( std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state.yaw ) ) < 90.0f / 180.0f * M_PI ){
@@ -885,7 +951,7 @@ int32_t main(int32_t argc, char **argv) {
                 std::cout <<" Start path checking..." << std::endl;
                 bool hasObOnPath = false; 
                 for ( const auto& pair_cand : angleFrontState_vec ){
-                    if ( pair_cand.front <= safe_endreach_dist ){
+                    if ( pair_cand.front <= 1.0f ){
                         continue;
                     }
 
@@ -916,28 +982,27 @@ int32_t main(int32_t argc, char **argv) {
                         cur_lookAroundState.targetAngle = pair_cand.angle;
                         // cur_lookAroundState.targetAngle = 90.0f / 180.0f * M_PI;
 
-                        // Try to refresh the rear distance
-                        float rearDist{-1.0f};
-                        for ( const auto& pair : angleFrontState_vec ){
-                            float angDev = std::abs( angleDifference( pair.angle, cur_lookAroundState.targetAngle ) );
-                            if ( angDev <= 90.0f / 180.0f * M_PI ){
-                                continue;
-                            }
-                            else{
-                                if ( std::abs( pair.front * std::cos( angDev ) ) < rearDist || rearDist == -1.0f ){
-                                    rearDist = std::abs( pair.front * std::cos( angDev ) );
-                                }
-                            }                        
-                        }
-                        cur_validWay.toRear = rearDist;
-
-                        // Record path related information
-                        for ( const auto& pair : angleFrontState_vec ){
-                            float angDev = angleDifference( cur_lookAroundState.targetAngle, pair.angle );
-                            distPathState pstate = { pair.front*std::cos( angDev ), pair.front*std::sin( angDev ) }; 
-                            distPathstate_vec.insert( distPathstate_vec.begin(), pstate ); 
-                            // std::cout <<" Try to print distance path state with on path: " << pstate.dist_valid_onPath << ", and dev path: " << pstate.dist_valid_devPath << std::endl;                  
-                        }
+                        // // Try to refresh the rear distance
+                        // float rearDist{-1.0f};
+                        // for ( const auto& pair : angleFrontState_vec ){
+                        //     float angDev = std::abs( angleDifference( pair.angle, cur_lookAroundState.targetAngle ) );
+                        //     if ( angDev <= 90.0f / 180.0f * M_PI ){
+                        //         continue;
+                        //     }
+                        //     else{
+                        //         if ( std::abs( pair.front * std::cos( angDev ) ) < rearDist || rearDist == -1.0f ){
+                        //             rearDist = std::abs( pair.front * std::cos( angDev ) );
+                        //         }
+                        //     }                        
+                        // }
+                        // cur_validWay.toRear = rearDist;
+                        // // Record path related information
+                        // for ( const auto& pair : angleFrontState_vec ){
+                        //     float angDev = angleDifference( cur_lookAroundState.targetAngle, pair.angle );
+                        //     distPathState pstate = { pair.front*std::cos( angDev ), pair.front*std::sin( angDev ) }; 
+                        //     distPathstate_vec.insert( distPathstate_vec.begin(), pstate ); 
+                        //     // std::cout <<" Try to print distance path state with on path: " << pstate.dist_valid_onPath << ", and dev path: " << pstate.dist_valid_devPath << std::endl;                  
+                        // }
 
                         // Try to turn to the angle
                         float angTurn = angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) + 5.0f / 180.0f * M_PI;
@@ -956,27 +1021,26 @@ int32_t main(int32_t argc, char **argv) {
                     // Found the path, turn to that angle
                     cur_lookAroundState.targetAngle = cur_lookAroundState.preAngle;
 
-                    // Try to refresh the rear distance
-                    float rearDist{-1.0f};
-                    for ( const auto& pair : angleFrontState_vec ){
-                        float angDev = std::abs( angleDifference( pair.angle, cur_lookAroundState.targetAngle ) );
-                        if ( angDev <= 90.0f / 180.0f * M_PI ){
-                            continue;;
-                        }
-                        else{
-                            if ( std::abs( pair.front * std::cos( angDev ) ) < rearDist || rearDist == -1.0f ){
-                                rearDist = std::abs( pair.front * std::cos( angDev ) );
-                            }
-                        }                        
-                    }
-                    cur_validWay.toRear = rearDist;
-
-                    // Record path related information
-                    for ( const auto& pair : angleFrontState_vec ){
-                        float angDev = angleDifference( cur_lookAroundState.targetAngle, pair.angle );
-                        distPathState pstate = { pair.front*std::cos( angDev ), pair.front*std::sin( angDev ) }; 
-                        distPathstate_vec.insert( distPathstate_vec.begin(), pstate );                    
-                    }
+                    // // Try to refresh the rear distance
+                    // float rearDist{-1.0f};
+                    // for ( const auto& pair : angleFrontState_vec ){
+                    //     float angDev = std::abs( angleDifference( pair.angle, cur_lookAroundState.targetAngle ) );
+                    //     if ( angDev <= 90.0f / 180.0f * M_PI ){
+                    //         continue;;
+                    //     }
+                    //     else{
+                    //         if ( std::abs( pair.front * std::cos( angDev ) ) < rearDist || rearDist == -1.0f ){
+                    //             rearDist = std::abs( pair.front * std::cos( angDev ) );
+                    //         }
+                    //     }                        
+                    // }
+                    // cur_validWay.toRear = rearDist;
+                    // // Record path related information
+                    // for ( const auto& pair : angleFrontState_vec ){
+                    //     float angDev = angleDifference( cur_lookAroundState.targetAngle, pair.angle );
+                    //     distPathState pstate = { pair.front*std::cos( angDev ), pair.front*std::sin( angDev ) }; 
+                    //     distPathstate_vec.insert( distPathstate_vec.begin(), pstate );                    
+                    // }
 
                     // Try to turn to the angle
                     float angTurn = angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) + 5.0f / 180.0f * M_PI;
@@ -1009,6 +1073,7 @@ int32_t main(int32_t argc, char **argv) {
                 // Reset other flags
                 cur_lookAroundState.turnStarted = false;
                 cur_lookAroundState.clearPathCheckStarted = false;
+                on_TURNING_MODE = false;
             }
         }   
     }
