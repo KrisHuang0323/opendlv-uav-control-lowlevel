@@ -279,8 +279,8 @@ int32_t main(int32_t argc, char **argv) {
     float start_turning_angle{0.0f};
 
     // Variables for homing
-    // float homing_batterythreshold = 3.4f;
-    float homing_batterythreshold = 2.5f;
+    float homing_batterythreshold = 3.4f;
+    // float homing_batterythreshold = 2.5f;
 
     // Variables for looking around
     struct angleFrontState {
@@ -431,8 +431,14 @@ int32_t main(int32_t argc, char **argv) {
             if ( toLeft != 4.0f ){
                 cur_validWay.toLeft = toLeft;
             }
+            else{
+                cur_validWay.toLeft = left;
+            }
             if ( toRight != 4.0f ){
                 cur_validWay.toRight = toRight;
+            }
+            else{
+                cur_validWay.toRight = right;
             }
             // std::cout <<" Valid way checking start... with left " << cur_validWay.toLeft << ", with right: " << cur_validWay.toRight << ", with rear: " << cur_validWay.toRear << ", and current angle: " << cur_state.yaw << std::endl;
         }
@@ -447,6 +453,7 @@ int32_t main(int32_t argc, char **argv) {
                 std::cout <<" Front end meets limit." << std::endl;
                 Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction
                 cur_reachEndState.reachFront = true; 
+                on_GoTO_MODE = false;
             }           
         }
         else{
@@ -454,6 +461,7 @@ int32_t main(int32_t argc, char **argv) {
         }
 
         if ( left <= safe_endreach_LR_dist ){
+            on_GoTO_MODE = false;
             if ( cur_pathReachingState.pathOnGoing == false && cur_dodgeType == DODGE_NONE ){
                 cur_preDist.left = -1.0f;
             }
@@ -484,6 +492,7 @@ int32_t main(int32_t argc, char **argv) {
         }
 
         if ( right <= safe_endreach_LR_dist ){
+            on_GoTO_MODE = false;
             if ( cur_pathReachingState.pathOnGoing == false && cur_dodgeType == DODGE_NONE ){
                 cur_preDist.right = -1.0f;
             }
@@ -513,7 +522,8 @@ int32_t main(int32_t argc, char **argv) {
             cur_reachEndState.reachRight = false;
         }
 
-        if ( rear <= safe_endreach_dist + cur_distToMove / time_toMove + 0.1f ){
+        if ( rear <= safe_endreach_LR_dist ){
+            on_GoTO_MODE = false;
             if ( cur_dodgeType != DODGE_NONE ){
                 std::cout <<" Rear end meets limit." << std::endl;
                 Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction
@@ -530,7 +540,8 @@ int32_t main(int32_t argc, char **argv) {
             - Use current valid way to dodge away from the obstacle
         */
         if ( dist_obs <= 250.0f && dist_obs > -1.0f ){    // Means that some obstacles approach
-            std::cout <<" Has dynamic obstacles with to left: " << cur_validWay.toLeft << ", to right: " << cur_validWay.toRight << ", to rear: " << cur_validWay.toRear << std::endl; 
+            std::cout <<" Has dynamic obstacles with to left: " << cur_validWay.toLeft << ", to right: " << cur_validWay.toRight << ", to rear: " << cur_validWay.toRear << ", obs on path: " << dist_obs * std::cos( aimDirection_obs ) << ", dist: " << dist_obs << ", aimDirection: " << aimDirection_obs << std::endl; 
+            on_GoTO_MODE = false;
 
             // While some ends are reached, simply fly up until the obstacle go away
             bool hasReachEnd = false;
@@ -544,6 +555,92 @@ int32_t main(int32_t argc, char **argv) {
                 dodgeDist_UP -= 0.3f;
                 cur_dodgeType = DODGE_UP;
                 continue;
+            }
+
+            if ( dist_obs * std::cos( aimDirection_obs ) <= 100.0f ){    
+                std::cout <<" Obstacle gets too close..." << std::endl;            
+                if ( aimDirection_obs < 0.0f ){
+                    // If left side has valid way, dodge to it
+                    if ( cur_validWay.toLeft >= safe_endreach_LR_dist + 0.2f ){
+                        Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
+                        std::cout <<" Try to dodge to the left..." << std::endl;
+                        Goto(od4, - 0.2f * std::sin( cur_state.yaw ), 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
+                        dodgeDist += 0.2f;
+                        on_GoTO_MODE = false;
+                        cur_dodgeType = DODGE_LEFT;
+                        continue;
+                    }
+                    else if ( cur_validWay.toRight >= safe_endreach_LR_dist + 0.4f ){
+                        Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
+                        std::cout <<" Try to dodge to the right..." << std::endl;
+                        Goto(od4, 0.4f * std::sin( cur_state.yaw ), - 0.4f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
+                        dodgeDist -= 0.4f;
+                        on_GoTO_MODE = false;
+                        cur_dodgeType = DODGE_RIGHT;
+                        continue;
+                    }
+                    else if ( cur_validWay.toRear >= safe_endreach_LR_dist + 0.2f && has_dodgeToRear == false ){
+                        Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
+                        std::cout <<" Try to dodge to the rear..." << std::endl;
+                        cur_distToMove = cur_validWay.toRear;
+                        time_toMove = 5;
+                        Goto(od4, - cur_distToMove * std::cos( cur_state.yaw ), - cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
+                        on_GoTO_MODE = true;
+                        cur_dodgeType = DODGE_REAR;
+                        has_dodgeToRear = true;
+                        continue;
+                    }
+                    else{
+                        Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
+                        std::cout <<" No valid way to dodge to, try to fly up..." << std::endl;
+                        Goto(od4, 0.0f, 0.0f, 0.3f, 0.0f, 0, 1, true);
+                        dodgeDist_UP -= 0.3f;
+                        on_GoTO_MODE = false;
+                        cur_dodgeType = DODGE_UP;
+                        continue;
+                    }
+                }
+                else{
+                    // If right side has valid way, dodge to it
+                    if ( cur_validWay.toRight >= safe_endreach_LR_dist + 0.2f ){
+                        Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
+                        std::cout <<" Try to dodge to the right..." << std::endl;
+                        Goto(od4, 0.2f * std::sin( cur_state.yaw ), - 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
+                        dodgeDist -= 0.2f;
+                        on_GoTO_MODE = false;
+                        cur_dodgeType = DODGE_RIGHT;
+                        continue;
+                    }
+                    else if ( cur_validWay.toLeft >= safe_endreach_LR_dist + 0.4f ){
+                        Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
+                        std::cout <<" Try to dodge to the left..." << std::endl;
+                        Goto(od4, - 0.4f * std::sin( cur_state.yaw ), 0.4f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
+                        dodgeDist += 0.4f;
+                        on_GoTO_MODE = false;
+                        cur_dodgeType = DODGE_LEFT;
+                        continue;
+                    }
+                    else if ( cur_validWay.toRear >= safe_endreach_LR_dist + 0.2f && has_dodgeToRear == false ){
+                        Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
+                        std::cout <<" Try to dodge to the rear..." << std::endl;
+                        cur_distToMove = cur_validWay.toRear;
+                        time_toMove = 5;
+                        Goto(od4, - cur_distToMove * std::cos( cur_state.yaw ), - cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
+                        on_GoTO_MODE = true;
+                        cur_dodgeType = DODGE_REAR;
+                        has_dodgeToRear = true;
+                        continue;
+                    }
+                    else{
+                        Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
+                        std::cout <<" No valid way to dodge to, try to fly up..." << std::endl;
+                        Goto(od4, 0.0f, 0.0f, 0.3f, 0.0f, 0, 1, true);
+                        dodgeDist_UP -= 0.3f;
+                        on_GoTO_MODE = false;
+                        cur_dodgeType = DODGE_UP;
+                        continue;
+                    }
+                }
             }
 
             if ( cur_dodgeType == DODGE_NONE ){
@@ -560,106 +657,114 @@ int32_t main(int32_t argc, char **argv) {
                 LOCAL_DODGE_LEFT,
                 LOCAL_DODGE_RIGHT
             };
-            if ( ( std::abs( dist_obs - cur_obsState.dist_obs ) > 50.0f || dist_obs <= 100.0f ) && cur_obsState.dist_obs >= dist_obs ){
+            if ( std::abs( dist_obs * std::cos( aimDirection_obs ) - cur_obsState.dist_obs * std::cos( cur_obsState.aimDirection_obs ) ) > 13.0f && std::abs( angleDifference(aimDirection_obs, cur_obsState.aimDirection_obs) ) <= 10.0f / 180.0f * M_PI && cur_obsState.dist_obs >= dist_obs ){
                 localDodgeType cur_localDodgeType = LOCAL_DODGE_LEFT;
                 if ( aimDirection_obs >= 0.0f && cur_obsState.aimDirection_obs >= 0.0f ){
-                    if ( aimDirection_obs >= cur_obsState.aimDirection_obs )
-                        cur_localDodgeType = LOCAL_DODGE_RIGHT;                    
+                    std::cout <<" Both in left side... " << std::endl; 
+                    if ( aimDirection_obs >= cur_obsState.aimDirection_obs ){
+                        cur_localDodgeType = LOCAL_DODGE_RIGHT;  
+                        std::cout <<" Current angle larger than before... " << std::endl; 
+                    }                  
                 }
-                else if ( aimDirection_obs >= 0.0f && cur_obsState.aimDirection_obs < 0.0f )
+                else if ( aimDirection_obs >= 0.0f && cur_obsState.aimDirection_obs < 0.0f ){
+                    std::cout <<" In different sides... " << std::endl; 
                     cur_localDodgeType = LOCAL_DODGE_RIGHT;
+                }
                 else if ( aimDirection_obs < 0.0f && cur_obsState.aimDirection_obs < 0.0f ){
-                    if ( aimDirection_obs >= cur_obsState.aimDirection_obs )
-                        cur_localDodgeType = LOCAL_DODGE_RIGHT;      
-                }                
-            }
-            else{
-
-            }
-
-            if ( aimDirection_obs >= 0.0f ){
-                // If right side has valid way, dodge to it
-                if ( cur_validWay.toRight >= safe_endreach_dist + 0.2f ){
-                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
-                    std::cout <<" Try to dodge to the right..." << std::endl;
-                    Goto(od4, 0.2f * std::sin( cur_state.yaw ), - 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
-                    dodgeDist -= 0.2f;
-                    on_GoTO_MODE = false;
-                    cur_dodgeType = DODGE_RIGHT;
-                    continue;
-                }
-                else if ( cur_validWay.toLeft >= safe_endreach_dist + 0.4f ){
-                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
-                    std::cout <<" Try to dodge to the left..." << std::endl;
-                    Goto(od4, - 0.4f * std::sin( cur_state.yaw ), 0.4f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
-                    dodgeDist += 0.4f;
-                    on_GoTO_MODE = false;
-                    cur_dodgeType = DODGE_LEFT;
-                    continue;
-                }
-                else if ( cur_validWay.toRear >= safe_endreach_dist + 0.2f && has_dodgeToRear == false ){
-                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
-                    std::cout <<" Try to dodge to the rear..." << std::endl;
-                    cur_distToMove = cur_validWay.toRear;
-                    time_toMove = 5;
-                    Goto(od4, - cur_distToMove * std::cos( cur_state.yaw ), - cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
-                    on_GoTO_MODE = true;
-                    cur_dodgeType = DODGE_REAR;
-                    has_dodgeToRear = true;
-                    continue;
-                }
-                else{
-                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
-                    std::cout <<" No valid way to dodge to, try to fly up..." << std::endl;
-                    Goto(od4, 0.0f, 0.0f, 0.3f, 0.0f, 0, 1, true);
-                    dodgeDist_UP -= 0.3f;
-                    on_GoTO_MODE = false;
-                    cur_dodgeType = DODGE_UP;
-                    continue;
-                }
-
-            }
-            else{
-                // If left side has valid way, dodge to it
-                if ( cur_validWay.toLeft >= safe_endreach_dist + 0.2f ){
-                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
-                    std::cout <<" Try to dodge to the left..." << std::endl;
-                    Goto(od4, - 0.2f * std::sin( cur_state.yaw ), 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
-                    dodgeDist += 0.2f;
-                    on_GoTO_MODE = false;
-                    cur_dodgeType = DODGE_LEFT;
-                    continue;
-                }
-                else if ( cur_validWay.toRight >= safe_endreach_dist + 0.4f ){
-                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
-                    std::cout <<" Try to dodge to the right..." << std::endl;
-                    Goto(od4, 0.4f * std::sin( cur_state.yaw ), - 0.4f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
-                    dodgeDist -= 0.4f;
-                    on_GoTO_MODE = false;
-                    cur_dodgeType = DODGE_RIGHT;
-                    continue;
-                }
-                else if ( cur_validWay.toRear >= safe_endreach_dist + 0.2f && has_dodgeToRear == false ){
-                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
-                    std::cout <<" Try to dodge to the rear..." << std::endl;
-                    cur_distToMove = cur_validWay.toRear;
-                    time_toMove = 5;
-                    Goto(od4, - cur_distToMove * std::cos( cur_state.yaw ), - cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
-                    on_GoTO_MODE = true;
-                    cur_dodgeType = DODGE_REAR;
-                    has_dodgeToRear = true;
-                    continue;
+                    std::cout <<" Both in right side... " << std::endl; 
+                    if ( aimDirection_obs >= cur_obsState.aimDirection_obs ){
+                        cur_localDodgeType = LOCAL_DODGE_RIGHT;  
+                        std::cout <<" Current angle larger than before... " << std::endl; 
+                    }    
+                }            
+                
+                if ( cur_localDodgeType == LOCAL_DODGE_LEFT ){
+                    // If left side has valid way, dodge to it
+                    if ( cur_validWay.toLeft >= safe_endreach_LR_dist + 0.2f ){
+                        // Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
+                        std::cout <<" Try to dodge to the left..." << std::endl;
+                        Goto(od4, - 0.2f * std::sin( cur_state.yaw ), 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
+                        dodgeDist += 0.2f;
+                        on_GoTO_MODE = false;
+                        cur_dodgeType = DODGE_LEFT;
+                        continue;
+                    }
+                    else if ( cur_validWay.toRight >= safe_endreach_LR_dist + 0.4f ){
+                        // Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
+                        std::cout <<" Try to dodge to the right..." << std::endl;
+                        Goto(od4, 0.4f * std::sin( cur_state.yaw ), - 0.4f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
+                        dodgeDist -= 0.4f;
+                        on_GoTO_MODE = false;
+                        cur_dodgeType = DODGE_RIGHT;
+                        continue;
+                    }
+                    else if ( cur_validWay.toRear >= safe_endreach_LR_dist + 0.2f && has_dodgeToRear == false ){
+                        // Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
+                        std::cout <<" Try to dodge to the rear..." << std::endl;
+                        cur_distToMove = cur_validWay.toRear;
+                        time_toMove = 5;
+                        Goto(od4, - cur_distToMove * std::cos( cur_state.yaw ), - cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
+                        on_GoTO_MODE = true;
+                        cur_dodgeType = DODGE_REAR;
+                        has_dodgeToRear = true;
+                        continue;
+                    }
+                    else{
+                        // Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
+                        std::cout <<" No valid way to dodge to, try to fly up..." << std::endl;
+                        Goto(od4, 0.0f, 0.0f, 0.3f, 0.0f, 0, 1, true);
+                        dodgeDist_UP -= 0.3f;
+                        on_GoTO_MODE = false;
+                        cur_dodgeType = DODGE_UP;
+                        continue;
+                    }
                 }
                 else{
-                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
-                    std::cout <<" No valid way to dodge to, try to fly up..." << std::endl;
-                    Goto(od4, 0.0f, 0.0f, 0.3f, 0.0f, 0, 1, true);
-                    dodgeDist_UP -= 0.3f;
-                    on_GoTO_MODE = false;
-                    cur_dodgeType = DODGE_UP;
-                    continue;
+                    // If right side has valid way, dodge to it
+                    if ( cur_validWay.toRight >= safe_endreach_LR_dist + 0.2f ){
+                        // Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
+                        std::cout <<" Try to dodge to the right..." << std::endl;
+                        Goto(od4, 0.2f * std::sin( cur_state.yaw ), - 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
+                        dodgeDist -= 0.2f;
+                        on_GoTO_MODE = false;
+                        cur_dodgeType = DODGE_RIGHT;
+                        continue;
+                    }
+                    else if ( cur_validWay.toLeft >= safe_endreach_LR_dist + 0.4f ){
+                        // Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
+                        std::cout <<" Try to dodge to the left..." << std::endl;
+                        Goto(od4, - 0.4f * std::sin( cur_state.yaw ), 0.4f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
+                        dodgeDist += 0.4f;
+                        on_GoTO_MODE = false;
+                        cur_dodgeType = DODGE_LEFT;
+                        continue;
+                    }
+                    else if ( cur_validWay.toRear >= safe_endreach_LR_dist + 0.2f && has_dodgeToRear == false ){
+                        // Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
+                        std::cout <<" Try to dodge to the rear..." << std::endl;
+                        cur_distToMove = cur_validWay.toRear;
+                        time_toMove = 5;
+                        Goto(od4, - cur_distToMove * std::cos( cur_state.yaw ), - cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
+                        on_GoTO_MODE = true;
+                        cur_dodgeType = DODGE_REAR;
+                        has_dodgeToRear = true;
+                        continue;
+                    }
+                    else{
+                        // Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
+                        std::cout <<" No valid way to dodge to, try to fly up..." << std::endl;
+                        Goto(od4, 0.0f, 0.0f, 0.3f, 0.0f, 0, 1, true);
+                        dodgeDist_UP -= 0.3f;
+                        on_GoTO_MODE = false;
+                        cur_dodgeType = DODGE_UP;
+                        continue;
+                    }
                 }
             }
+
+            // Record current dist and aimDirection for later use
+            cur_obsState.dist_obs = dist_obs;
+            cur_obsState.aimDirection_obs = aimDirection_obs;
         }
         else if ( cur_dodgeType != DODGE_NONE ){
             // Go back to the original position while the obstacle is gone
@@ -691,6 +796,14 @@ int32_t main(int32_t argc, char **argv) {
         if ( cur_state.battery_state <= homing_batterythreshold ){
             dist_to_reach = dist_chpad;
             aimDirection_to_reach = aimDirection_chpad;
+
+            // Find the charging pad, stop and do landing
+            if ( dist_to_reach * std::cos( aimDirection_to_reach ) <= 30.0f && dist_to_reach != -1.0f ){
+                Landing(od4, 0.0f, 3);
+                Stopping(od4);
+                std::cout <<" Successfully do landing and stopping..." << std::endl;
+                break;
+            }
         }
 
         // If meets the front/left/right end, reset all flags
@@ -722,10 +835,10 @@ int32_t main(int32_t argc, char **argv) {
                     cur_distToMove = 0.7f;
                     time_toMove = 2;
                 }
-                else if ( cur_state.battery_state <= homing_batterythreshold ){
-                    cur_distToMove = 0.8f;
-                }
-                // Goto(od4, cur_distToMove * std::cos( cur_state.yaw ), cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);
+                // else if ( cur_state.battery_state <= homing_batterythreshold ){
+                //     cur_distToMove = 0.8f;
+                // }
+                Goto(od4, cur_distToMove * std::cos( cur_state.yaw ), cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);
                 cur_pathReachingState.pathOnGoing = true;
                 cur_pathReachingState.startFront = front;
                 on_GoTO_MODE = true;
@@ -753,19 +866,19 @@ int32_t main(int32_t argc, char **argv) {
                         on_GoTO_MODE = false;
                     }
                 }
-                else if ( cur_state.battery_state <= homing_batterythreshold && std::abs( cur_pathReachingState.startFront - front ) >= 0.8f && cur_targetCheckState.targetAngle == -1.0f ){
-                    // Reach the target, stop current action
-                    std::cout <<" Reach target with front distance reached but with homing mode..." << std::endl;
-                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0);
+                // else if ( cur_state.battery_state <= homing_batterythreshold && std::abs( cur_pathReachingState.startFront - front ) >= 0.8f && cur_targetCheckState.targetAngle == -1.0f ){
+                //     // Reach the target, stop current action
+                //     std::cout <<" Reach target with front distance reached but with homing mode, pre front: " << cur_pathReachingState.startFront << ", cur front: " << front << std::endl;
+                //     Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0);
 
-                    // Reset flags
-                    cur_pathReachingState.pathOnGoing = false;
-                    cur_pathReachingState.pathReadyToGo = false;
-                    on_GoTO_MODE = false;
-                }
+                //     // Reset flags
+                //     cur_pathReachingState.pathOnGoing = false;
+                //     cur_pathReachingState.pathReadyToGo = false;
+                //     on_GoTO_MODE = false;
+                // }
                 else if ( std::abs( cur_pathReachingState.startFront - front ) >= cur_distToMove ){
                     // Reach the target, stop current action
-                    std::cout <<" Reach target with front distance reached..." << std::endl;
+                    std::cout <<" Reach target with front distance reached, pre front: " << cur_pathReachingState.startFront << ", cur front: " << front << std::endl;
                     Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0);
 
                     // Reset flags
@@ -787,8 +900,16 @@ int32_t main(int32_t argc, char **argv) {
         */
         // If Interrupted
         if ( has_possibleInterrupt ){
+            // if ( cur_targetCheckState.targetAngle != -1.0f ){
+            //     std::cout <<" Possible interruption with target exist..." << std::endl;
+            //     cur_targetCheckState.clearAngVec = false;
+            //     cur_targetCheckState.aimTurnStarted = false;
+            //     cur_targetCheckState.turnStarted = false;
+            //     has_possibleInterrupt = false;
+            //     on_TURNING_MODE = false;
+            // }
             if ( cur_targetCheckState.turnStarted || cur_targetCheckState.clearPathCheckStarted || cur_targetCheckState.targetAngle != -1.0f ){
-                std::cout <<" Possible interruption to reset target reaching..." << std::endl;
+                std::cout <<" Possible interruption without target..." << std::endl;
                 cur_targetCheckState.clearAngVec = false;
                 cur_targetCheckState.aimTurnStarted = false;
                 cur_targetCheckState.pointToTarget = false;
@@ -812,7 +933,7 @@ int32_t main(int32_t argc, char **argv) {
 
         // Try to point the crazyflie to the target first
         // std::cout <<" Current angle: " << aimDirection_to_reach << ", current battery state: "<< cur_state.battery_state << std::endl;  
-        if ( aimDirection_to_reach != -4.0f && cur_targetCheckState.pointToTarget == false ){
+        if ( aimDirection_to_reach != -4.0f && cur_targetCheckState.pointToTarget == false && dist_to_reach * std::cos( aimDirection_to_reach ) > 20.0f ){
             if ( std::abs( aimDirection_to_reach ) >= 1.0 / 180.0f * M_PI ){
                 // std::cout <<" Has target, start to turn to it..." << std::endl;   
                 if ( cur_targetCheckState.pointToTarget ){
@@ -874,7 +995,7 @@ int32_t main(int32_t argc, char **argv) {
         }
 
         // Try to find a clear path close to the target
-        if ( ( dist_to_reach > -1.0f || cur_targetCheckState.targetAngle != -1.0f ) && cur_targetCheckState.pointToTarget ){
+        if ( ( dist_to_reach * std::cos( aimDirection_to_reach ) > 20.0f || cur_targetCheckState.targetAngle != -1.0f ) && cur_targetCheckState.pointToTarget ){
             if ( cur_targetCheckState.clearPathCheckStarted == false ){
                 std::cout <<" Found the target, ready to turn to it" << std::endl;
                 if ( cur_targetCheckState.clearAngVec == false ){
