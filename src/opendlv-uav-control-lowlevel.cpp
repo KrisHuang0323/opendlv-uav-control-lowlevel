@@ -220,7 +220,7 @@ int32_t main(int32_t argc, char **argv) {
     bool on_TURNING_MODE = false;
 
     // Variables for static obstacles avoidance
-    float safe_endreach_dist = 0.3;
+    float safe_endreach_dist = 0.20;
     float safe_endreach_LR_dist = 0.1;
     float cur_distToMove{0.0f};
     int time_toMove = 1;
@@ -267,15 +267,15 @@ int32_t main(int32_t argc, char **argv) {
 
     // Variables for target finding
     struct targetCheckState {
-        bool clearAngVec;
         bool aimTurnStarted;
         bool pointToTarget;
-        bool clearPathCheckStarted;
         bool turnStarted;
         float startAngle;
+        float cur_aimDiff;
+        float ang_toTurn;
         float targetAngle;
     };
-    targetCheckState cur_targetCheckState = {false, false, false, false, false, -1.0f, -1.0f};
+    targetCheckState cur_targetCheckState = {false, false, false, -1.0f, 100.0f / 180.0f * M_PI, -1.0f, -1.0f};
     float start_turning_angle{0.0f};
 
     // Variables for homing
@@ -286,16 +286,18 @@ int32_t main(int32_t argc, char **argv) {
     struct angleFrontState {
         float angle;
         float front;
-    };
+    };    
     std::vector<angleFrontState> angleFrontState_vec;
     struct lookAroundState {
         bool clearPathCheckStarted;
         bool turnStarted;
+        bool smallToBig;
         float preAngle;
         float startAngle;
         float targetAngle;
+        int nTimer;
     };
-    lookAroundState cur_lookAroundState = {false, false, -1.0f, -1.0f, -1.0f};
+    lookAroundState cur_lookAroundState = {false, false, false, -1.0f, -10.0f, -1.0f, 0};
     float ori_front{0.0f};
     float ori_rear{0.0f};
     std::random_device rd;
@@ -784,13 +786,14 @@ int32_t main(int32_t argc, char **argv) {
             has_dodgeToRear = false;
             on_GoTO_MODE = false;
             has_possibleInterrupt = true;
-        }
-
+        }        
+        
         /*
-            Front reaching
-            - Go to the path straightforwardly if permitted
+            Target finding
+            - Check that whether there has green ball or chpad as target
+            - If green ball exist, check that the crazyflie has a clear path to it
+            - Use the dist/aimDirection from last section
         */
-        // Switch between target and charging pad according to battery state 
         float dist_to_reach = dist_target;
         float aimDirection_to_reach = aimDirection_target;
         if ( cur_state.battery_state <= homing_batterythreshold ){
@@ -806,13 +809,177 @@ int32_t main(int32_t argc, char **argv) {
             }
         }
 
+        // If Interrupted
+        if ( has_possibleInterrupt ){
+            if ( cur_targetCheckState.pointToTarget == false && ( cur_targetCheckState.turnStarted || cur_targetCheckState.aimTurnStarted ) ){
+                std::cout <<" Possible interruption without target..." << std::endl;
+                cur_targetCheckState.aimTurnStarted = false;
+                cur_targetCheckState.turnStarted = false;
+                has_possibleInterrupt = false;
+                on_TURNING_MODE = false;
+            }
+        }
+
+        // If some targets found
+        if ( cur_targetCheckState.turnStarted || cur_targetCheckState.aimTurnStarted ){
+            if ( cur_lookAroundState.turnStarted || cur_lookAroundState.clearPathCheckStarted ){
+                std::cout <<" Since some targets found, reset look around..." << std::endl;            
+                cur_lookAroundState.turnStarted = false;
+                cur_lookAroundState.clearPathCheckStarted = false;
+                cur_lookAroundState.nTimer = 0;
+            }
+        }
+
+        // Try to point the crazyflie to the target first
+        // std::cout <<" Current angle: " << aimDirection_to_reach << ", current battery state: "<< cur_state.battery_state << std::endl;  
+        if ( cur_targetCheckState.pointToTarget == false && ( ( aimDirection_to_reach != -4.0f && dist_to_reach * std::cos( aimDirection_to_reach ) > 20.0f ) || cur_targetCheckState.aimTurnStarted ) ){
+            if ( cur_targetCheckState.aimTurnStarted == false ){
+                std::cout <<" Find target start turning..." << std::endl;   
+                // Stop first
+                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false, false);
+
+                if ( aimDirection_to_reach > 0.0f ){    
+                    // Turn the rest of 90 degree to complete the overall clear path record
+                    float angTurn = 90.0f / 180.0f * M_PI;
+                    if ( cur_lookAroundState.startAngle != -10.0f && std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state.yaw ) ) < 90.0f / 180.0f * M_PI ){
+                        angTurn -= std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state.yaw ) );
+                    }
+                    cur_targetCheckState.ang_toTurn = angTurn;
+                    cur_targetCheckState.startAngle = cur_state.yaw;    
+                    Goto(od4, 0.0f, 0.0f, 0.0f, angTurn + 10.0f / 180.0f * M_PI, 2); 
+                }
+                else{
+                    float angTurn = -90.0f / 180.0f * M_PI;
+                    cur_targetCheckState.ang_toTurn = std::abs(angTurn);
+                    cur_targetCheckState.startAngle = cur_state.yaw;    
+                    Goto(od4, 0.0f, 0.0f, 0.0f, angTurn - 10.0f / 180.0f * M_PI, 2);
+                }
+                std::cout <<" Angle to turn: " << cur_targetCheckState.ang_toTurn << std::endl;   
+                cur_targetCheckState.aimTurnStarted = true;    
+                on_TURNING_MODE = true;
+                continue;
+            }
+            else if ( cur_targetCheckState.turnStarted == false ){
+                if ( std::abs( angleDifference( cur_targetCheckState.startAngle, cur_state.yaw ) ) < cur_targetCheckState.ang_toTurn ){
+                    // Record the angle and front                    
+                    angleFrontState state;
+                    state.front = front;
+                    state.angle = wrap_angle(cur_state.yaw);
+                    angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
+                    
+                    state.front = rear;
+                    state.angle = wrap_angle(cur_state.yaw + M_PI);
+                    angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
+    
+                    state.front = left;
+                    state.angle = wrap_angle(cur_state.yaw + M_PI / 2.0f);
+                    angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
+    
+                    state.front = right;
+                    state.angle = wrap_angle(cur_state.yaw - M_PI / 2.0f);
+                    angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
+    
+                    // Record target angle
+                        std::cout <<" Current aim direction diff:" << std::abs( aimDirection_to_reach ) << std::endl;   
+                    if ( cur_targetCheckState.cur_aimDiff > std::abs( aimDirection_to_reach ) ){
+                        cur_targetCheckState.targetAngle = cur_state.yaw;
+                        cur_targetCheckState.cur_aimDiff = std::abs( aimDirection_to_reach );
+                        std::cout <<" Current angle: "<< cur_state.yaw << " and aim diff: " << std::abs( aimDirection_to_reach ) << std::endl;   
+                    }
+                    continue;
+                }
+                else{
+                    // Check the target angle to go to ( the clear path)
+                    // Stop the turning action
+                    std::cout <<" Complete turning and start to check..." << std::endl;   
+                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        
+                    // Sort the angle array first                
+                    std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [cur_targetCheckState](const angleFrontState& a, const angleFrontState& b) {
+                        if(a.angle != b.angle){
+                            float angledev_a = std::abs( angleDifference( a.angle,cur_targetCheckState.targetAngle ) );
+                            float angledev_b = std::abs( angleDifference( b.angle, cur_targetCheckState.targetAngle ) );
+                            return angledev_a < angledev_b;
+                        }
+                    });
+    
+                    // Check for clear path
+                    bool hasObOnPath = false; 
+                    for ( const auto& pair_cand : angleFrontState_vec ){
+                        float angMin = std::abs( std::atan2( 0.1f, pair_cand.front ) );
+                        hasObOnPath = false;
+                        for ( const auto& pair_to_compare : angleFrontState_vec ){
+                            float angDev = std::abs( angleDifference( pair_to_compare.angle, pair_cand.angle ) );
+                            if ( angDev <= angMin ){
+                                if ( pair_to_compare.front * std::cos( angDev ) < pair_cand.front - safe_endreach_dist ){
+                                    hasObOnPath = true;
+                                    break;
+                                }
+                            }
+                            else if ( angDev <= 45.0f / 180.0f * M_PI && angDev > angMin ){
+                                if ( pair_to_compare.front * std::sin( angDev ) <= 0.1f ){
+                                    hasObOnPath = true;
+                                    break;
+                                }
+                            }                        
+                        }
+    
+                        if ( hasObOnPath == false ){
+                            // Found the path, turn to that angle
+                            cur_targetCheckState.targetAngle = pair_cand.angle;
+    
+                            // Try to turn to the angle
+                            std::cout <<" Current angle: " << cur_state.yaw << std::endl;  
+                            std::cout <<" Target angle: " << cur_targetCheckState.targetAngle << std::endl; 
+                            std::cout <<" Angle difference: " << angleDifference( cur_state.yaw, cur_targetCheckState.targetAngle ) << std::endl; 
+                            float angTurn = angleDifference( cur_state.yaw, cur_targetCheckState.targetAngle ) + 5.0f / 180.0f * M_PI;
+                            if ( angleDifference( cur_state.yaw, cur_targetCheckState.targetAngle ) < 0.0f ){
+                                angTurn -= 10.0f / 180.0f * M_PI;
+                            }
+                            Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 1);
+                            cur_targetCheckState.turnStarted = true;
+                            break;
+                        }
+                    }
+                    continue;
+                }
+            }
+            else{
+                if ( std::abs( angleDifference( cur_targetCheckState.targetAngle, cur_state.yaw ) ) >= 5.0f / 180.0f * M_PI ){
+                    // continue turning
+                        // std::cout <<" Keep turning with angle diff: " << angleDifference( cur_state.yaw, cur_targetCheckState.targetAngle ) << std::endl; 
+                    continue;
+                }
+                else{
+                    // Ready to go to path
+                    std::cout <<" Turn to the target angle, ready to go to it..." << std::endl;
+                    cur_pathReachingState.pathReadyToGo = true;
+                    cur_targetCheckState.pointToTarget = true;
+                    ori_front = front;
+                    ori_rear = rear;
+    
+                    // Reset other flags
+                    cur_targetCheckState.aimTurnStarted = false;
+                    cur_targetCheckState.turnStarted = false;
+                    on_TURNING_MODE = false;
+                }
+                continue;
+            }
+        }
+
+        /*
+            Front reaching
+            - Go to the path straightforwardly if permitted
+        */
+        // Switch between target and charging pad according to battery state 
         // If meets the front/left/right end, reset all flags
         if ( cur_reachEndState.reachFront == true || cur_reachEndState.reachLeft == true || cur_reachEndState.reachRight == true ){
             if ( cur_pathReachingState.pathReadyToGo || cur_pathReachingState.pathOnGoing ){
                 std::cout <<" Reach end stop going with front: " << cur_reachEndState.reachFront << ", left: " << cur_reachEndState.reachLeft << ", right: " << cur_reachEndState.reachRight << std::endl;
                 cur_pathReachingState.pathReadyToGo = false;
                 cur_pathReachingState.pathOnGoing = false;
-                cur_targetCheckState.targetAngle = -1.0f;
+                cur_targetCheckState.pointToTarget = false;
                 on_GoTO_MODE = false;
             }
         }
@@ -851,18 +1018,13 @@ int32_t main(int32_t argc, char **argv) {
                         Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0);
 
                         // Reset flags
-                        cur_targetCheckState.targetAngle = -1.0f;
-                        cur_pathReachingState.pathOnGoing = false;
-                        cur_pathReachingState.pathReadyToGo = false;
                         on_GoTO_MODE = false;
                     }
-                    else if ( std::abs( cur_pathReachingState.startFront - front ) >= 0.5f ){
-                        std::cout <<" Reach target with 0.5 range..." << std::endl;
+                    else if ( std::abs( cur_pathReachingState.startFront - front ) >= 0.6f ){
+                        std::cout <<" Reach target with 0.6 range..." << std::endl;
                         Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0);
 
                         // Reset flags
-                        cur_pathReachingState.pathOnGoing = false;
-                        cur_pathReachingState.pathReadyToGo = false;
                         on_GoTO_MODE = false;
                     }
                 }
@@ -882,255 +1044,23 @@ int32_t main(int32_t argc, char **argv) {
                     Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0);
 
                     // Reset flags
+                    on_GoTO_MODE = false;
+                }
+
+                if ( on_GoTO_MODE == false ){
                     cur_pathReachingState.pathOnGoing = false;
                     cur_pathReachingState.pathReadyToGo = false;
-                    cur_targetCheckState.targetAngle = -1.0f;
-                    on_GoTO_MODE = false;
+                    
+                    cur_targetCheckState.pointToTarget = false;
+                    cur_targetCheckState.cur_aimDiff = 100.0f / 180.0f * M_PI;
+
+                    // Initialize the vector here
+                    if ( angleFrontState_vec.size() > 0 ){
+                        angleFrontState_vec.clear();
+                    }
                 }
             }
             continue;
-        }
-        
-        
-        /*
-            Target finding
-            - Check that whether there has green ball or chpad as target
-            - If green ball exist, check that the crazyflie has a clear path to it
-            - Use the dist/aimDirection from last section
-        */
-        // If Interrupted
-        if ( has_possibleInterrupt ){
-            // if ( cur_targetCheckState.targetAngle != -1.0f ){
-            //     std::cout <<" Possible interruption with target exist..." << std::endl;
-            //     cur_targetCheckState.clearAngVec = false;
-            //     cur_targetCheckState.aimTurnStarted = false;
-            //     cur_targetCheckState.turnStarted = false;
-            //     has_possibleInterrupt = false;
-            //     on_TURNING_MODE = false;
-            // }
-            if ( cur_targetCheckState.turnStarted || cur_targetCheckState.clearPathCheckStarted || cur_targetCheckState.targetAngle != -1.0f ){
-                std::cout <<" Possible interruption without target..." << std::endl;
-                cur_targetCheckState.clearAngVec = false;
-                cur_targetCheckState.aimTurnStarted = false;
-                cur_targetCheckState.pointToTarget = false;
-                cur_targetCheckState.turnStarted = false;
-                cur_targetCheckState.clearPathCheckStarted = false;
-                cur_targetCheckState.targetAngle = -1.0f;
-                has_possibleInterrupt = false;
-                on_TURNING_MODE = false;
-            }
-        }
-
-        // If some targets found
-        if ( cur_targetCheckState.turnStarted || cur_targetCheckState.clearPathCheckStarted ){
-            if ( cur_lookAroundState.turnStarted || cur_lookAroundState.clearPathCheckStarted ){
-                std::cout <<" Since some targets found, reset look around..." << std::endl;            
-                cur_lookAroundState.turnStarted = false;
-                cur_lookAroundState.clearPathCheckStarted = false;
-                // on_TURNING_MODE = false;
-            }
-        }
-
-        // Try to point the crazyflie to the target first
-        // std::cout <<" Current angle: " << aimDirection_to_reach << ", current battery state: "<< cur_state.battery_state << std::endl;  
-        if ( aimDirection_to_reach != -4.0f && cur_targetCheckState.pointToTarget == false && dist_to_reach * std::cos( aimDirection_to_reach ) > 20.0f ){
-            if ( std::abs( aimDirection_to_reach ) >= 1.0 / 180.0f * M_PI ){
-                // std::cout <<" Has target, start to turn to it..." << std::endl;   
-                if ( cur_targetCheckState.pointToTarget ){
-                    cur_targetCheckState.pointToTarget = false;
-                }
-
-                if ( cur_targetCheckState.clearAngVec == false ){
-                    if ( angleFrontState_vec.size() > 0 ){
-                        // Initialize the vector here
-                        angleFrontState_vec.clear();
-                        distPathstate_vec.clear();
-                    }
-                    cur_targetCheckState.clearAngVec = true;
-                }
-
-                // if ( cur_targetCheckState.aimTurnStarted == false ){
-                //     cur_targetCheckState.aimTurnStarted = true;
-                // }
-                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false, false);
-                if ( aimDirection_to_reach > 0.0f ){
-                    // std::cout <<" Turn to left..." << std::endl;   
-                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.1f / 180.0f * M_PI, 0, 1, false, false);
-                }
-                else{
-                    // std::cout <<" Turn to right..." << std::endl;   
-                    Goto(od4, 0.0f, 0.0f, 0.0f, -0.1f / 180.0f * M_PI, 0, 1, false, false);
-                }
-                on_TURNING_MODE = true;
-
-                // Record the angle and front                    
-                angleFrontState state;
-                state.front = front;
-                state.angle = cur_state.yaw;
-                angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
-                
-                state.front = rear;
-                state.angle = cur_state.yaw + M_PI;
-                angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
-
-                state.front = left;
-                state.angle = cur_state.yaw + M_PI / 2.0f;
-                angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
-
-                state.front = right;
-                state.angle = cur_state.yaw - M_PI / 2.0f;
-                angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
-                continue;
-            }
-            else{
-                std::cout <<" Has target, in angle range..." << std::endl;  
-                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0);
-                if ( cur_targetCheckState.aimTurnStarted ){
-                    cur_targetCheckState.aimTurnStarted = false;
-                    on_TURNING_MODE = false;
-                }
-                cur_targetCheckState.pointToTarget = true;
-                continue;
-            }
-        }
-
-        // Try to find a clear path close to the target
-        if ( ( dist_to_reach * std::cos( aimDirection_to_reach ) > 20.0f || cur_targetCheckState.targetAngle != -1.0f ) && cur_targetCheckState.pointToTarget ){
-            if ( cur_targetCheckState.clearPathCheckStarted == false ){
-                std::cout <<" Found the target, ready to turn to it" << std::endl;
-                if ( cur_targetCheckState.clearAngVec == false ){
-                    if ( angleFrontState_vec.size() > 0 ){
-                        // Initialize the vector here
-                        angleFrontState_vec.clear();
-                        distPathstate_vec.clear();
-                    }
-                    cur_targetCheckState.clearAngVec = true;
-                }
-                cur_targetCheckState.startAngle = cur_state.yaw;
-                cur_targetCheckState.targetAngle = cur_state.yaw;
-                Goto(od4, 0.0f, 0.0f, 0.0f, 100.0f / 180.0f * M_PI, 3);
-                cur_targetCheckState.clearPathCheckStarted = true;
-                on_TURNING_MODE = true;
-                continue;
-            }
-            else if ( cur_targetCheckState.turnStarted == false ){
-                if ( std::abs( angleDifference( cur_targetCheckState.startAngle, cur_state.yaw ) ) < 90.0f / 180.0f * M_PI ){
-                    // Record the angle and front                    
-                    angleFrontState state;
-                    state.front = front;
-                    state.angle = cur_state.yaw;
-                    angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
-                    
-                    state.front = rear;
-                    state.angle = cur_state.yaw + M_PI;
-                    angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
-
-                    state.front = left;
-                    state.angle = cur_state.yaw + M_PI / 2.0f;
-                    angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
-
-                    state.front = right;
-                    state.angle = cur_state.yaw - M_PI / 2.0f;
-                    angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
-                }
-                else{
-                    // Stop the turning action
-                    Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0);
-    
-                    // Sort the angle array first                
-                    std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [cur_targetCheckState](const angleFrontState& a, const angleFrontState& b) {
-                        if(a.angle != b.angle){
-                            float angledev_a = std::abs( angleDifference( a.angle,cur_targetCheckState.targetAngle ) );
-                            float angledev_b = std::abs( angleDifference( b.angle, cur_targetCheckState.targetAngle ) );
-                            return angledev_a < angledev_b;
-                        }
-                    });
-    
-                    // Check for clear path
-                    bool hasObOnPath = false; 
-                    for ( const auto& pair_cand : angleFrontState_vec ){
-                        // if ( pair_cand.front <= safe_endreach_dist ){
-                        //     continue;
-                        // }
-
-                        float angMin = std::abs( std::atan2( 0.1f, pair_cand.front ) );
-                        hasObOnPath = false;
-                        for ( const auto& pair_to_compare : angleFrontState_vec ){
-                            float angDev = std::abs( angleDifference( pair_to_compare.angle, pair_cand.angle ) );
-                            if ( angDev <= angMin ){
-                                if ( pair_to_compare.front * std::cos( angDev ) < pair_cand.front - safe_endreach_dist ){
-                                    hasObOnPath = true;
-                                    break;
-                                }
-                            }
-                            else if ( angDev <= 45.0f / 180.0f * M_PI && angDev > angMin ){
-                                if ( pair_to_compare.front * std::sin( angDev ) <= 0.1f ){
-                                    hasObOnPath = true;
-                                    break;
-                                }
-                            }                        
-                        }
-    
-                        if ( hasObOnPath == false ){
-                            // Found the path, turn to that angle
-                            cur_targetCheckState.targetAngle = pair_cand.angle;
-    
-                            // // Try to refresh the rear distance
-                            // float rearDist{-1.0f};
-                            // for ( const auto& pair : angleFrontState_vec ){
-                            //     float angDev = std::abs( angleDifference( pair.angle, cur_lookAroundState.targetAngle ) );
-                            //     if ( angDev <= 90.0f / 180.0f * M_PI ){
-                            //         continue;;
-                            //     }
-                            //     else{
-                            //         if ( std::abs( pair.front * std::cos( angDev ) ) < rearDist || rearDist == -1.0f ){
-                            //             rearDist = std::abs( pair.front * std::cos( angDev ) );
-                            //         }
-                            //     }                        
-                            // }
-                            // cur_validWay.toRear = rearDist;
-                            // // Record path related information
-                            // for ( const auto& pair : angleFrontState_vec ){
-                            //     float angDev = angleDifference( pair_cand.angle, pair.angle );
-                            //     distPathState pstate = { pair.front*std::cos( angDev ), pair.front*std::sin( angDev ) }; 
-                            //     distPathstate_vec.insert( distPathstate_vec.begin(), pstate );                    
-                            // }
-    
-                            // Try to turn to the angle
-                            float angTurn = angleDifference( cur_state.yaw, cur_targetCheckState.targetAngle ) + 5.0f / 180.0f * M_PI;
-                            if ( angleDifference( cur_state.yaw, cur_targetCheckState.targetAngle ) < 0.0f ){
-                                angTurn -= 10.0f / 180.0f * M_PI;
-                            }
-                            Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 3);
-                            cur_targetCheckState.turnStarted = true;
-                            break;
-                        }
-                    }
-                } 
-                continue;
-            }
-            else{    
-                if ( std::abs( angleDifference( cur_targetCheckState.targetAngle, cur_state.yaw ) ) >= 5.0f / 180.0f * M_PI ){
-                    // continue turning
-                    continue;
-                }
-                else{
-                    // Ready to go to path
-                    std::cout <<" Turn to the target angle, ready to go to it..." << std::endl;
-                    cur_pathReachingState.pathReadyToGo = true;
-                    ori_front = front;
-                    ori_rear = rear;
-    
-                    // Reset other flags
-                    cur_targetCheckState.clearAngVec = false;
-                    cur_targetCheckState.aimTurnStarted = false;
-                    cur_targetCheckState.pointToTarget = false;
-                    cur_targetCheckState.turnStarted = false;
-                    cur_targetCheckState.clearPathCheckStarted = false;
-                    on_TURNING_MODE = false;
-                }
-                continue;
-            }    
         }
         
 
@@ -1145,6 +1075,7 @@ int32_t main(int32_t argc, char **argv) {
                 std::cout <<" Possible interruption to reset look around..." << std::endl;
                 cur_lookAroundState.turnStarted = false;
                 cur_lookAroundState.clearPathCheckStarted = false;
+                cur_lookAroundState.nTimer = 0;
                 has_possibleInterrupt = false;
                 on_TURNING_MODE = false;
             }
@@ -1154,63 +1085,75 @@ int32_t main(int32_t argc, char **argv) {
         // std::cout <<" Run to here with clearPathCheckStarted: " << cur_lookAroundState.clearPathCheckStarted << std::endl;
         if ( cur_lookAroundState.clearPathCheckStarted == false ){
             std::cout <<" No target exist, ready to turn around to find" << std::endl;
-            if ( angleFrontState_vec.size() > 0 ){
-                // Initialize the vector here
-                angleFrontState_vec.clear();
-                distPathstate_vec.clear();
+            if ( cur_lookAroundState.nTimer == 0 ){
+                if ( angleFrontState_vec.size() > 0 ){
+                    // Initialize the vector here
+                    angleFrontState_vec.clear();
+                }
+                cur_lookAroundState.preAngle = cur_state.yaw + M_PI;
             }
             cur_lookAroundState.startAngle = cur_state.yaw;
-            cur_lookAroundState.preAngle = cur_state.yaw + M_PI;
-            Goto(od4, 0.0f, 0.0f, 0.0f, 100.0f / 180.0f * M_PI, 3);
+            Goto(od4, 0.0f, 0.0f, 0.0f, 120.0f / 180.0f * M_PI, 2);
             cur_lookAroundState.clearPathCheckStarted = true;
             on_TURNING_MODE = true;
         }
         else if ( cur_lookAroundState.turnStarted == false ){
-            if ( std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state.yaw ) ) < 90.0f / 180.0f * M_PI ){
+            if ( std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state.yaw ) ) < 110.0f / 180.0f * M_PI ){
                 // std::cout <<" Record target with angle dev: " << std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state.yaw ) ) << ", and vector size: " << angleFrontState_vec.size() << std::endl;
-                // Record the angle and front
                 // Record the angle and front
                 angleFrontState state;
                 state.front = front;
-                state.angle = cur_state.yaw;
+                state.angle = wrap_angle(cur_state.yaw);
                 angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
                 
                 state.front = rear;
-                state.angle = cur_state.yaw + M_PI;
+                state.angle = wrap_angle(cur_state.yaw + M_PI);
                 angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
 
                 state.front = left;
-                state.angle = cur_state.yaw + M_PI / 2.0f;
+                state.angle = wrap_angle(cur_state.yaw + M_PI / 2.0f);
                 angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
 
                 state.front = right;
-                state.angle = cur_state.yaw - M_PI / 2.0f;
+                state.angle = wrap_angle(cur_state.yaw - M_PI / 2.0f);
                 angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
                 // std::cout <<" Add to vector... " << std::endl;
             }
             else{
                 // Stop the turning action
-                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0);
+                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false);
+
+                if ( cur_lookAroundState.nTimer < 2 ){
+                    cur_lookAroundState.clearPathCheckStarted = false;
+                    cur_lookAroundState.nTimer += 1;
+                    continue;
+                }
+                else{
+                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                    cur_lookAroundState.nTimer = 0;
+                }
 
                 // Sort the angle array first 
-                if ( distribution(gen) ){
+                if ( cur_lookAroundState.smallToBig == false ){
                     std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
                         if( a.front != b.front )
                             return a.front > b.front;
                     });
+                    cur_lookAroundState.smallToBig = true;
                 }
                 else{
                     std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
                         if( a.front != b.front )
                             return a.front < b.front;
                     });
+                    cur_lookAroundState.smallToBig = false;
                 }
 
                 // Check for clear path
                 std::cout <<" Start path checking..." << std::endl;
                 bool hasObOnPath = false; 
                 for ( const auto& pair_cand : angleFrontState_vec ){
-                    if ( pair_cand.front <= safe_endreach_dist + pair_cand.front / 5 + 0.1f ){
+                    if ( pair_cand.front <= safe_endreach_dist + pair_cand.front / 5 ){
                         continue;
                     }
 
@@ -1239,36 +1182,17 @@ int32_t main(int32_t argc, char **argv) {
                     if ( hasObOnPath == false ){
                         // Found the path, turn to that angle
                         cur_lookAroundState.targetAngle = pair_cand.angle;
-                        // cur_lookAroundState.targetAngle = 90.0f / 180.0f * M_PI;
-
-                        // // Try to refresh the rear distance
-                        // float rearDist{-1.0f};
-                        // for ( const auto& pair : angleFrontState_vec ){
-                        //     float angDev = std::abs( angleDifference( pair.angle, cur_lookAroundState.targetAngle ) );
-                        //     if ( angDev <= 90.0f / 180.0f * M_PI ){
-                        //         continue;
-                        //     }
-                        //     else{
-                        //         if ( std::abs( pair.front * std::cos( angDev ) ) < rearDist || rearDist == -1.0f ){
-                        //             rearDist = std::abs( pair.front * std::cos( angDev ) );
-                        //         }
-                        //     }                        
-                        // }
-                        // cur_validWay.toRear = rearDist;
-                        // // Record path related information
-                        // for ( const auto& pair : angleFrontState_vec ){
-                        //     float angDev = angleDifference( cur_lookAroundState.targetAngle, pair.angle );
-                        //     distPathState pstate = { pair.front*std::cos( angDev ), pair.front*std::sin( angDev ) }; 
-                        //     distPathstate_vec.insert( distPathstate_vec.begin(), pstate ); 
-                        //     // std::cout <<" Try to print distance path state with on path: " << pstate.dist_valid_onPath << ", and dev path: " << pstate.dist_valid_devPath << std::endl;                  
-                        // }
 
                         // Try to turn to the angle
+                        // std::cout <<" Current angle: " << cur_state.yaw << std::endl;
+                        // std::cout <<" Target angle: " << cur_lookAroundState.targetAngle << std::endl;
+                        // std::cout <<" Vector size: " << angleFrontState_vec.size() << std::endl;
+                        // std::cout <<" Angle difference: " << angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) << std::endl;
                         float angTurn = angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) + 5.0f / 180.0f * M_PI;
                         if ( angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) < 0.0f ){
                             angTurn -= 10.0f / 180.0f * M_PI;
                         }
-                        Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 3);
+                        Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 1);
                         std::cout <<" Found a path to go to and start turning to target angle with target: " << cur_lookAroundState.targetAngle << std::endl;
                         cur_lookAroundState.turnStarted = true;
                         break;
@@ -1302,11 +1226,15 @@ int32_t main(int32_t argc, char **argv) {
                     // }
 
                     // Try to turn to the angle
+                    // std::cout <<" Current angle: " << cur_state.yaw << std::endl;
+                    // std::cout <<" Target angle: " << cur_lookAroundState.targetAngle << std::endl;
+                    // std::cout <<" Vector size: " << angleFrontState_vec.size() << std::endl;
+                    // std::cout <<" Angle difference: " << angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) << std::endl;
                     float angTurn = angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) + 5.0f / 180.0f * M_PI;
                     if ( angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) < 0.0f ){
                         angTurn -= 10.0f / 180.0f * M_PI;
                     }
-                    Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 3);
+                    Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 1);
                     std::cout <<" No path to go to so start turning to the previous target angle with target: " << cur_lookAroundState.targetAngle << std::endl;
                     cur_lookAroundState.turnStarted = true;
                 }
@@ -1318,7 +1246,7 @@ int32_t main(int32_t argc, char **argv) {
             // continue;
             if ( std::abs( angleDifference( cur_lookAroundState.targetAngle, cur_state.yaw ) ) >= 5.0f / 180.0f * M_PI ){
                 // continue turning
-                // std::cout <<" Keep turning to that angle..." << std::endl;
+                // std::cout <<" Keep turning to that angle with current angle: " << cur_state.yaw << std::endl;
                 continue;
             }
             else{
@@ -1332,6 +1260,7 @@ int32_t main(int32_t argc, char **argv) {
                 // Reset other flags
                 cur_lookAroundState.turnStarted = false;
                 cur_lookAroundState.clearPathCheckStarted = false;
+                cur_lookAroundState.startAngle = -10.0f;
                 on_TURNING_MODE = false;
             }
         }   
