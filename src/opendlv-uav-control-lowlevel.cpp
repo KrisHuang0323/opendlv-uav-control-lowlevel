@@ -307,8 +307,8 @@ int32_t main(int32_t argc, char **argv) {
 
     // Timer to record time of each behaviour
     struct taskTimer {
-        auto StartTime = std::chrono::high_resolution_clock::now();
-        auto EndTime = std::chrono::high_resolution_clock::now();
+        std::chrono::high_resolution_clock::time_point StartTime = std::chrono::high_resolution_clock::now();
+        std::chrono::high_resolution_clock::time_point EndTime = std::chrono::high_resolution_clock::now();
     };
     taskTimer task_timer;
 
@@ -733,7 +733,7 @@ int32_t main(int32_t argc, char **argv) {
                 const std::chrono::duration<double> elapsed = task_timer.EndTime - task_timer.StartTime;
                 std::cout <<" Task complete with start time: " << task_timer.StartTime << std::endl;
                 std::cout <<" , end time: " << task_timer.EndTime << std::endl;
-                std::cout <<" , elapsed: " << elapsed << std::endl;
+                std::cout <<" , elapsed: " << elapsed.count() << std::endl;
                 break;
             }
         }
