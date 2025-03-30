@@ -29,6 +29,7 @@
 #include <iterator>
 #include <cmath>
 #include <random>
+#include <chrono>
 
 
 void Takeoff(cluon::OD4Session &od4, float height, int duration){
@@ -304,6 +305,14 @@ int32_t main(int32_t argc, char **argv) {
     std::mt19937 gen(rd());
     std::uniform_int_distribution<int> distribution (0, 1);
 
+    // Timer to record time of each behaviour
+    struct taskTimer {
+        auto StartTime = std::chrono::high_resolution_clock::now();
+        auto EndTime = std::chrono::high_resolution_clock::now();
+    };
+    taskTimer task_timer;
+
+
     while (od4.isRunning()) {
         // Sleep for 10 ms to not let the loop run to fast
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -317,6 +326,7 @@ int32_t main(int32_t argc, char **argv) {
             if ( cur_state.battery_state > takeoff_batterythreshold ){
                 Takeoff(od4, 1.0f, 3);
                 hasTakeoff = true;
+                task_timer.StartTime = std::chrono::high_resolution_clock::now();
             }
             else{
                 std::cout <<" Battery is too low for taking off..." << std::endl;
@@ -717,6 +727,13 @@ int32_t main(int32_t argc, char **argv) {
                 Landing(od4, 0.0f, 3);
                 Stopping(od4);
                 std::cout <<" Successfully do landing and stopping..." << std::endl;
+
+                // Record the end time
+                task_timer.EndTime = std::chrono::high_resolution_clock::now();
+                const std::chrono::duration<double> elapsed = task_timer.EndTime - task_timer.StartTime;
+                std::cout <<" Task complete with start time: " << task_timer.StartTime << std::endl;
+                std::cout <<" , end time: " << task_timer.EndTime << std::endl;
+                std::cout <<" , elapsed: " << elapsed << std::endl;
                 break;
             }
         }
@@ -849,7 +866,7 @@ int32_t main(int32_t argc, char **argv) {
                     // Check for clear path
                     bool hasObOnPath = false; 
                     for ( const auto& pair_cand : angleFrontState_vec ){
-                        if ( pair_cand.front <= safe_endreach_dist){
+                        if ( pair_cand.front <= safe_endreach_dist + 0.7 / 2){
                             continue;
                         }
 
@@ -915,7 +932,7 @@ int32_t main(int32_t argc, char **argv) {
                     Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false);
 
                     // If current front is not goable
-                    if ( front <= safe_endreach_dist ){
+                    if ( front <= safe_endreach_dist + 0.7 / 2 ){
                         std::cout <<" Turn to the target angle, But current angle is not goable..." << std::endl;
                         angleFrontState state;
                         state.front = front;
@@ -1266,7 +1283,7 @@ int32_t main(int32_t argc, char **argv) {
                 Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false);
 
                 // If current front is not goable
-                if ( front <= safe_endreach_dist + pair_cand.front / 3 ){
+                if ( front <= safe_endreach_dist + front / 3 ){
                     std::cout <<" Turn to the target angle, But current angle is not goable..." << std::endl;
                     angleFrontState state;
                     state.front = front;
