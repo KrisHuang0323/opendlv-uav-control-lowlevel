@@ -306,11 +306,8 @@ int32_t main(int32_t argc, char **argv) {
     std::uniform_int_distribution<int> distribution (0, 1);
 
     // Timer to record time of each behaviour
-    struct taskTimer {
-        std::chrono::high_resolution_clock::time_point StartTime = std::chrono::high_resolution_clock::now();
-        std::chrono::high_resolution_clock::time_point EndTime = std::chrono::high_resolution_clock::now();
-    };
-    taskTimer task_timer;
+    auto taskStartTime = std::chrono::high_resolution_clock::now();
+    auto taskEndTime = std::chrono::high_resolution_clock::now();
 
 
     while (od4.isRunning()) {
@@ -326,7 +323,7 @@ int32_t main(int32_t argc, char **argv) {
             if ( cur_state.battery_state > takeoff_batterythreshold ){
                 Takeoff(od4, 1.0f, 3);
                 hasTakeoff = true;
-                task_timer.StartTime = std::chrono::high_resolution_clock::now();
+                taskStartTime = std::chrono::high_resolution_clock::now();
             }
             else{
                 std::cout <<" Battery is too low for taking off..." << std::endl;
@@ -729,11 +726,11 @@ int32_t main(int32_t argc, char **argv) {
                 std::cout <<" Successfully do landing and stopping..." << std::endl;
 
                 // Record the end time
-                task_timer.EndTime = std::chrono::high_resolution_clock::now();
-                const std::chrono::duration<double> elapsed = task_timer.EndTime - task_timer.StartTime;
-                std::cout <<" Task complete with start time: " << task_timer.StartTime << std::endl;
-                std::cout <<" , end time: " << task_timer.EndTime << std::endl;
-                std::cout <<" , elapsed: " << elapsed.count() << std::endl;
+                taskEndTime = std::chrono::high_resolution_clock::now();
+                const std::chrono::duration<double> elapsed = taskEndTime - taskStartTime
+                std::cout <<" Task complete with start time: " << taskStartTime << std::endl;
+                std::cout <<" , end time: " << taskEndTime << std::endl;
+                std::cout <<" , elapsed: " << elapsed << std::endl;
                 break;
             }
         }
