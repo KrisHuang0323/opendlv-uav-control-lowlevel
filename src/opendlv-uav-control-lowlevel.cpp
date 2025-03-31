@@ -728,9 +728,17 @@ int32_t main(int32_t argc, char **argv) {
                 // Record the end time
                 taskEndTime = std::chrono::high_resolution_clock::now();
                 const std::chrono::duration<double> elapsed = taskEndTime - taskStartTime;
-                std::cout <<" Task complete with start time: " << taskStartTime << std::endl;
-                std::cout <<" , end time: " << taskEndTime << std::endl;
-                std::cout <<" , elapsed: " << elapsed.count() << std::endl;
+
+                auto start_time_t = std::chrono::system_clock::to_time_t(
+                    std::chrono::time_point_cast<std::chrono::system_clock::duration>(taskStartTime)
+                );
+                auto end_time_t = std::chrono::system_clock::to_time_t(
+                    std::chrono::time_point_cast<std::chrono::system_clock::duration>(taskEndTime)
+                );
+
+                std::cout <<" Task complete with start time: " << std::ctime(&start_time_t) << std::endl;
+                std::cout <<" , end time: " << std::ctime(&end_time_t) << std::endl;
+                std::cout <<" , elapsed: " << elapsed.count() << " seconds(s)" << std::endl;
                 break;
             }
         }
