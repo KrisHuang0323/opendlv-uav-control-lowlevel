@@ -114,21 +114,21 @@
  
      // Handler to receive distance readings (realized as C++ lambda).
      std::mutex distancesMutex;
-     float front{0};
-     float rear{0};
-     float left{0};
-     float right{0};
-     auto onDistance = [&distancesMutex, &front, &rear, &left, &right](cluon::data::Envelope &&env){
+     float front_r{0};
+     float rear_r{0};
+     float left_r{0};
+     float right_r{0};
+     auto onDistance = [&distancesMutex, &front_r, &rear_r, &left_r, &right_r](cluon::data::Envelope &&env){
          auto senderStamp = env.senderStamp();
          // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
          opendlv::proxy::DistanceReading dr = cluon::extractMessage<opendlv::proxy::DistanceReading>(std::move(env));
          // Store distance readings.
          std::lock_guard<std::mutex> lck(distancesMutex);
          switch (senderStamp) {
-             case 0: front = dr.distance(); break;
-             case 1: rear = dr.distance(); break;
-             case 2: left = dr.distance(); break;
-             case 3: right = dr.distance(); break;
+             case 0: front_r = dr.distance(); break;
+             case 1: rear_r = dr.distance(); break;
+             case 2: left_r = dr.distance(); break;
+             case 3: right_r = dr.distance(); break;
          }
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
@@ -140,24 +140,24 @@
          float battery_state;
      };
      std::mutex stateMutex;
-     State cur_state{0.0f, 0.0f};
-     auto onStateRead = [&stateMutex, &cur_state](cluon::data::Envelope &&env){
+     State cur_state_r{0.0f, 0.0f};
+     auto onStateRead = [&stateMutex, &cur_state_r](cluon::data::Envelope &&env){
          auto senderStamp = env.senderStamp();
          // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
          opendlv::logic::sensation::CrazyFlieState cfState = cluon::extractMessage<opendlv::logic::sensation::CrazyFlieState>(std::move(env));
          // Store distance readings.
          std::lock_guard<std::mutex> lck(stateMutex);
-         cur_state.yaw = cfState.cur_yaw();
-         cur_state.battery_state = cfState.battery_state();
+         cur_state_r.yaw = cfState.cur_yaw();
+         cur_state_r.battery_state = cfState.battery_state();
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
      od4.dataTrigger(opendlv::logic::sensation::CrazyFlieState::ID(), onStateRead);
  
-     float dist_target{-1.0f};
-     float dist_obs{-1.0f};
-     float dist_chpad{-1.0f};
+     float dist_target_r{-1.0f};
+     float dist_obs_r{-1.0f};
+     float dist_chpad_r{-1.0f};
      std::mutex distMutex;
-     auto onDistRead = [&distMutex, &dist_target, &dist_obs, &dist_chpad](cluon::data::Envelope &&env){
+     auto onDistRead = [&distMutex, &dist_target_r, &dist_obs_r, &dist_chpad_r](cluon::data::Envelope &&env){
          auto senderStamp = env.senderStamp();
          // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
          opendlv::logic::action::PreviewPoint pPtmessage = cluon::extractMessage<opendlv::logic::action::PreviewPoint>(std::move(env));
@@ -165,23 +165,23 @@
          // Store distance readings.
          std::lock_guard<std::mutex> lck(distMutex);
          if ( senderStamp == 0 ){
-             dist_target = pPtmessage.distance();
+            dist_target_r = pPtmessage.distance();
          }
          else if ( senderStamp == 1 ){
-             dist_obs = pPtmessage.distance();
+            dist_obs_r = pPtmessage.distance();
          }
          else if ( senderStamp == 2 ){
-             dist_chpad = pPtmessage.distance();
+            dist_chpad_r = pPtmessage.distance();
          }
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
      od4.dataTrigger(opendlv::logic::action::PreviewPoint::ID(), onDistRead);
  
-     float aimDirection_target{-4.0f};
-     float aimDirection_obs{-4.0f};
-     float aimDirection_chpad{-4.0f};
+     float aimDirection_target_r{-4.0f};
+     float aimDirection_obs_r{-4.0f};
+     float aimDirection_chpad_r{-4.0f};
      std::mutex aimDirectionMutex;
-     auto onAimDirectionRead = [&aimDirectionMutex, &aimDirection_target, &aimDirection_obs, &aimDirection_chpad](cluon::data::Envelope &&env){
+     auto onAimDirectionRead = [&aimDirectionMutex, &aimDirection_target_r, &aimDirection_obs_r, &aimDirection_chpad_r](cluon::data::Envelope &&env){
          auto senderStamp = env.senderStamp();
          // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
          opendlv::logic::action::AimDirection aDirmessage = cluon::extractMessage<opendlv::logic::action::AimDirection>(std::move(env));
@@ -189,13 +189,13 @@
          // Store aim direction readings.
          std::lock_guard<std::mutex> lck(aimDirectionMutex);
          if ( senderStamp == 0 ){
-             aimDirection_target = aDirmessage.azimuthAngle();
+            aimDirection_target_r = aDirmessage.azimuthAngle();
          }
          else if ( senderStamp == 1 ){
-             aimDirection_obs = aDirmessage.azimuthAngle();
+            aimDirection_obs_r = aDirmessage.azimuthAngle();
          }
          else if ( senderStamp == 2 ){
-             aimDirection_chpad = aDirmessage.azimuthAngle();
+            aimDirection_chpad_r = aDirmessage.azimuthAngle();
          }
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
@@ -318,10 +318,45 @@
      auto frontReachingEndTime = std::chrono::high_resolution_clock::now();
      auto lookAroundStartTime = std::chrono::high_resolution_clock::now();
      auto lookAroundEndTime = std::chrono::high_resolution_clock::now();
+
+     // Reading from sensors
+     std::mutex readMutex;
+     float front{0};
+     float rear{0};
+     float left{0};
+     float right{0};
+     struct State {
+         float yaw;
+         float battery_state;
+     };
+     State cur_state{0.0f, 0.0f};
+     float dist_target{-1.0f};
+     float dist_obs{-1.0f};
+     float dist_chpad{-1.0f};
+     float aimDirection_target{-4.0f};
+     float aimDirection_obs{-4.0f};
+     float aimDirection_chpad{-4.0f};
  
      while (od4.isRunning()) {
          // Sleep for 10 ms to not let the loop run to fast
          std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+         // Read all data first         
+         {
+            std::lock_guard<std::mutex> lck(readMutex);
+            front = front_r;
+            rear = rear_r;
+            left = left_r;
+            right = right_r;
+            cur_state.yaw = cur_state_r.yaw;
+            cur_state.battery_state = cur_state_r.battery_state;
+            dist_target = dist_target_r;
+            dist_obs = dist_obs_r;
+            dist_chpad = dist_chpad_r;
+            aimDirection_target = aimDirection_target_r;
+            aimDirection_obs = aimDirection_obs_r;
+            aimDirection_chpad = aimDirection_chpad_r;
+        }
  
          /*
              Takeoff
