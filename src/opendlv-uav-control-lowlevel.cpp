@@ -325,10 +325,6 @@
      float rear{0};
      float left{0};
      float right{0};
-     struct State {
-         float yaw;
-         float battery_state;
-     };
      State cur_state{0.0f, 0.0f};
      float dist_target{-1.0f};
      float dist_obs{-1.0f};
