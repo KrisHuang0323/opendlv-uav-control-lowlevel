@@ -112,26 +112,36 @@ int32_t main(int32_t argc, char **argv) {
         return retCode;
     }
 
-    // Interface to a running OpenDaVINCI session; here, you can send and receive messages.
-    cluon::OD4Session od4{static_cast<uint16_t>(std::stoi(commandlineArguments["cid"]))};
+    const float homing_batterythreshold = (commandlineArguments.count("hbat") != 0) ? std::stof(commandlineArguments["hbat"]) : 3.35;
+    const float takeoff_batterythreshold = (commandlineArguments.count("tbat") != 0) ? std::stof(commandlineArguments["tbat"]) : 3.6;
 
+    // Interface to a running OpenDaVINCI session; here, you can send and receive messages.
+    // cluon::OD4Session od4{static_cast<uint16_t>(std::stoi(commandlineArguments["cid"]))};
+    auto od4 = std::make_shared<cluon::OD4Session>(static_cast<uint16_t>(std::stoi(commandlineArguments["cid"])));
+
+    std::atomic<bool> staticAvoidanceActive(false);
+    std::atomic<bool> dynamicAvoidanceActive(false);
+    std::atomic<bool> frontReachingActive(false);
+    std::atomic<bool> targetFindingActive(false);
+    std::atomic<bool> lookingAroundActive(false);
+    
     // Handler to receive distance readings (realized as C++ lambda).
     std::mutex distancesMutex;
-    float front_r{0};
-    float rear_r{0};
-    float left_r{0};
-    float right_r{0};
-    auto onDistance = [&distancesMutex, &front_r, &rear_r, &left_r, &right_r](cluon::data::Envelope &&env){
+    float front{0};
+    float rear{0};
+    float left{0};
+    float right{0};
+    auto onDistance = [&distancesMutex, &front, &rear, &left, &right](cluon::data::Envelope &&env){
         auto senderStamp = env.senderStamp();
         // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
         opendlv::proxy::DistanceReading dr = cluon::extractMessage<opendlv::proxy::DistanceReading>(std::move(env));
         // Store distance readings.
         std::lock_guard<std::mutex> lck(distancesMutex);
         switch (senderStamp) {
-            case 0: front_r = dr.distance(); break;
-            case 1: rear_r = dr.distance(); break;
-            case 2: left_r = dr.distance(); break;
-            case 3: right_r = dr.distance(); break;
+            case 0: front = dr.distance(); break;
+            case 1: rear = dr.distance(); break;
+            case 2: left = dr.distance(); break;
+            case 3: right = dr.distance(); break;
         }
     };
     // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
@@ -143,24 +153,24 @@ int32_t main(int32_t argc, char **argv) {
         float battery_state;
     };
     std::mutex stateMutex;
-    State cur_state_r{0.0f, 0.0f};
-    auto onStateRead = [&stateMutex, &cur_state_r](cluon::data::Envelope &&env){
+    State cur_state{0.0f, 0.0f};
+    auto onStateRead = [&stateMutex, &cur_state](cluon::data::Envelope &&env){
         auto senderStamp = env.senderStamp();
         // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
         opendlv::logic::sensation::CrazyFlieState cfState = cluon::extractMessage<opendlv::logic::sensation::CrazyFlieState>(std::move(env));
         // Store distance readings.
         std::lock_guard<std::mutex> lck(stateMutex);
-        cur_state_r.yaw = cfState.cur_yaw();
-        cur_state_r.battery_state = cfState.battery_state();
+        cur_state.yaw = cfState.cur_yaw();
+        cur_state.battery_state = cfState.battery_state();
     };
     // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
     od4.dataTrigger(opendlv::logic::sensation::CrazyFlieState::ID(), onStateRead);
 
-    float dist_target_r{-1.0f};
-    float dist_obs_r{-1.0f};
-    float dist_chpad_r{-1.0f};
+    float dist_target{-1.0f};
+    float dist_obs{-1.0f};
+    float dist_chpad{-1.0f};
     std::mutex distMutex;
-    auto onDistRead = [&distMutex, &dist_target_r, &dist_obs_r, &dist_chpad_r](cluon::data::Envelope &&env){
+    auto onDistRead = [&distMutex, &dist_target, &dist_obs, &dist_chpad](cluon::data::Envelope &&env){
         auto senderStamp = env.senderStamp();
         // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
         opendlv::logic::action::PreviewPoint pPtmessage = cluon::extractMessage<opendlv::logic::action::PreviewPoint>(std::move(env));
@@ -168,23 +178,23 @@ int32_t main(int32_t argc, char **argv) {
         // Store distance readings.
         std::lock_guard<std::mutex> lck(distMutex);
         if ( senderStamp == 0 ){
-           dist_target_r = pPtmessage.distance();
+            dist_target = pPtmessage.distance();
         }
         else if ( senderStamp == 1 ){
-           dist_obs_r = pPtmessage.distance();
+            dist_obs = pPtmessage.distance();
         }
         else if ( senderStamp == 2 ){
-           dist_chpad_r = pPtmessage.distance();
+            dist_chpad = pPtmessage.distance();
         }
     };
     // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
     od4.dataTrigger(opendlv::logic::action::PreviewPoint::ID(), onDistRead);
 
-    float aimDirection_target_r{-4.0f};
-    float aimDirection_obs_r{-4.0f};
-    float aimDirection_chpad_r{-4.0f};
+    float aimDirection_target{-4.0f};
+    float aimDirection_obs{-4.0f};
+    float aimDirection_chpad{-4.0f};
     std::mutex aimDirectionMutex;
-    auto onAimDirectionRead = [&aimDirectionMutex, &aimDirection_target_r, &aimDirection_obs_r, &aimDirection_chpad_r](cluon::data::Envelope &&env){
+    auto onAimDirectionRead = [&aimDirectionMutex, &aimDirection_target, &aimDirection_obs, &aimDirection_chpad](cluon::data::Envelope &&env){
         auto senderStamp = env.senderStamp();
         // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
         opendlv::logic::action::AimDirection aDirmessage = cluon::extractMessage<opendlv::logic::action::AimDirection>(std::move(env));
@@ -192,13 +202,13 @@ int32_t main(int32_t argc, char **argv) {
         // Store aim direction readings.
         std::lock_guard<std::mutex> lck(aimDirectionMutex);
         if ( senderStamp == 0 ){
-           aimDirection_target_r = aDirmessage.azimuthAngle();
+            aimDirection_target = aDirmessage.azimuthAngle();
         }
         else if ( senderStamp == 1 ){
-           aimDirection_obs_r = aDirmessage.azimuthAngle();
+            aimDirection_obs = aDirmessage.azimuthAngle();
         }
         else if ( senderStamp == 2 ){
-           aimDirection_chpad_r = aDirmessage.azimuthAngle();
+            aimDirection_chpad = aDirmessage.azimuthAngle();
         }
     };
     // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
@@ -206,7 +216,7 @@ int32_t main(int32_t argc, char **argv) {
 
     // Takeoff flags
     bool hasTakeoff = false;
-    float takeoff_batterythreshold = 3.6f;
+    // float takeoff_batterythreshold = 3.6f;
 
     // Varibles to record current valid ranges
     struct distPathState {
@@ -284,7 +294,7 @@ int32_t main(int32_t argc, char **argv) {
     float start_turning_angle{0.0f};
 
     // Variables for homing
-    float homing_batterythreshold = 3.35f;
+    // float homing_batterythreshold = 3.35f;
     // float homing_batterythreshold = 2.5f;
 
     // Variables for looking around
@@ -322,26 +332,23 @@ int32_t main(int32_t argc, char **argv) {
     auto lookAroundStartTime = std::chrono::high_resolution_clock::now();
     auto lookAroundEndTime = std::chrono::high_resolution_clock::now();
 
-    // Reading from sensors
-    std::mutex readMutex;
-    float front{0};
-    float rear{0};
-    float left{0};
-    float right{0};
-    State cur_state{0.0f, 0.0f};
-    float dist_target{-1.0f};
-    float dist_obs{-1.0f};
-    float dist_chpad{-1.0f};
-    float aimDirection_target{-4.0f};
-    float aimDirection_obs{-4.0f};
-    float aimDirection_chpad{-4.0f};
-
 
     // 初始動作：起飛
+    if ( hasTakeoff == false ){
+        if ( cur_state.battery_state > takeoff_batterythreshold ){
+            Takeoff(od4, 1.0f, 3);
+            hasTakeoff = true;
+            taskStartTime = std::chrono::high_resolution_clock::now();
+        }
+        else{
+            std::cout <<" Battery is too low for taking off..." << std::endl;
+            continue;
+        }
+    }
     Takeoff(1.0f, 3);
 
     // 建立各行為的執行緒
-    std::thread t([&value]() {
+    std::thread ValidDirectionCheckTask([&value]() {
         std::cout << "執行緒中的值: " << value << std::endl;
     });
 
