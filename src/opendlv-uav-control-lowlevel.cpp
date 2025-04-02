@@ -108,27 +108,30 @@
          std::cerr << "You should include the cid to start communicate in OD4Session" << std::endl;
          return retCode;
      }
+
+     const float homing_batterythreshold = (commandlineArguments.count("hbat") != 0) ? std::stof(commandlineArguments["hbat"]) : 3.35;
+     const float takeoff_batterythreshold = (commandlineArguments.count("tbat") != 0) ? std::stof(commandlineArguments["tbat"]) : 3.6;
  
      // Interface to a running OpenDaVINCI session; here, you can send and receive messages.
      cluon::OD4Session od4{static_cast<uint16_t>(std::stoi(commandlineArguments["cid"]))};
  
      // Handler to receive distance readings (realized as C++ lambda).
      std::mutex distancesMutex;
-     float front_r{0};
-     float rear_r{0};
-     float left_r{0};
-     float right_r{0};
-     auto onDistance = [&distancesMutex, &front_r, &rear_r, &left_r, &right_r](cluon::data::Envelope &&env){
+     float front{0};
+     float rear{0};
+     float left{0};
+     float right{0};
+     auto onDistance = [&distancesMutex, &front, &rear, &left, &right](cluon::data::Envelope &&env){
          auto senderStamp = env.senderStamp();
          // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
          opendlv::proxy::DistanceReading dr = cluon::extractMessage<opendlv::proxy::DistanceReading>(std::move(env));
          // Store distance readings.
          std::lock_guard<std::mutex> lck(distancesMutex);
          switch (senderStamp) {
-             case 0: front_r = dr.distance(); break;
-             case 1: rear_r = dr.distance(); break;
-             case 2: left_r = dr.distance(); break;
-             case 3: right_r = dr.distance(); break;
+             case 0: front = dr.distance(); break;
+             case 1: rear = dr.distance(); break;
+             case 2: left = dr.distance(); break;
+             case 3: right = dr.distance(); break;
          }
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
@@ -140,24 +143,24 @@
          float battery_state;
      };
      std::mutex stateMutex;
-     State cur_state_r{0.0f, 0.0f};
-     auto onStateRead = [&stateMutex, &cur_state_r](cluon::data::Envelope &&env){
+     State cur_state{0.0f, 0.0f};
+     auto onStateRead = [&stateMutex, &cur_state](cluon::data::Envelope &&env){
          auto senderStamp = env.senderStamp();
          // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
          opendlv::logic::sensation::CrazyFlieState cfState = cluon::extractMessage<opendlv::logic::sensation::CrazyFlieState>(std::move(env));
          // Store distance readings.
          std::lock_guard<std::mutex> lck(stateMutex);
-         cur_state_r.yaw = cfState.cur_yaw();
-         cur_state_r.battery_state = cfState.battery_state();
+         cur_state.yaw = cfState.cur_yaw();
+         cur_state.battery_state = cfState.battery_state();
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
      od4.dataTrigger(opendlv::logic::sensation::CrazyFlieState::ID(), onStateRead);
  
-     float dist_target_r{-1.0f};
-     float dist_obs_r{-1.0f};
-     float dist_chpad_r{-1.0f};
+     float dist_target{-1.0f};
+     float dist_obs{-1.0f};
+     float dist_chpad{-1.0f};
      std::mutex distMutex;
-     auto onDistRead = [&distMutex, &dist_target_r, &dist_obs_r, &dist_chpad_r](cluon::data::Envelope &&env){
+     auto onDistRead = [&distMutex, &dist_target, &dist_obs, &dist_chpad](cluon::data::Envelope &&env){
          auto senderStamp = env.senderStamp();
          // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
          opendlv::logic::action::PreviewPoint pPtmessage = cluon::extractMessage<opendlv::logic::action::PreviewPoint>(std::move(env));
@@ -165,23 +168,23 @@
          // Store distance readings.
          std::lock_guard<std::mutex> lck(distMutex);
          if ( senderStamp == 0 ){
-            dist_target_r = pPtmessage.distance();
+             dist_target = pPtmessage.distance();
          }
          else if ( senderStamp == 1 ){
-            dist_obs_r = pPtmessage.distance();
+             dist_obs = pPtmessage.distance();
          }
          else if ( senderStamp == 2 ){
-            dist_chpad_r = pPtmessage.distance();
+             dist_chpad = pPtmessage.distance();
          }
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
      od4.dataTrigger(opendlv::logic::action::PreviewPoint::ID(), onDistRead);
  
-     float aimDirection_target_r{-4.0f};
-     float aimDirection_obs_r{-4.0f};
-     float aimDirection_chpad_r{-4.0f};
+     float aimDirection_target{-4.0f};
+     float aimDirection_obs{-4.0f};
+     float aimDirection_chpad{-4.0f};
      std::mutex aimDirectionMutex;
-     auto onAimDirectionRead = [&aimDirectionMutex, &aimDirection_target_r, &aimDirection_obs_r, &aimDirection_chpad_r](cluon::data::Envelope &&env){
+     auto onAimDirectionRead = [&aimDirectionMutex, &aimDirection_target, &aimDirection_obs, &aimDirection_chpad](cluon::data::Envelope &&env){
          auto senderStamp = env.senderStamp();
          // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
          opendlv::logic::action::AimDirection aDirmessage = cluon::extractMessage<opendlv::logic::action::AimDirection>(std::move(env));
@@ -189,13 +192,13 @@
          // Store aim direction readings.
          std::lock_guard<std::mutex> lck(aimDirectionMutex);
          if ( senderStamp == 0 ){
-            aimDirection_target_r = aDirmessage.azimuthAngle();
+             aimDirection_target = aDirmessage.azimuthAngle();
          }
          else if ( senderStamp == 1 ){
-            aimDirection_obs_r = aDirmessage.azimuthAngle();
+             aimDirection_obs = aDirmessage.azimuthAngle();
          }
          else if ( senderStamp == 2 ){
-            aimDirection_chpad_r = aDirmessage.azimuthAngle();
+             aimDirection_chpad = aDirmessage.azimuthAngle();
          }
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
@@ -203,7 +206,7 @@
  
      // Takeoff flags
      bool hasTakeoff = false;
-     float takeoff_batterythreshold = 3.6f;
+    //  float takeoff_batterythreshold = 3.6f;
  
      // Varibles to record current valid ranges
      struct distPathState {
@@ -221,7 +224,7 @@
      bool on_TURNING_MODE = false;
  
      // Variables for static obstacles avoidance
-     float safe_endreach_dist = 0.27;
+     float safe_endreach_dist = 0.30;
      float safe_endreach_LR_dist = 0.1;
      float cur_distToMove{0.0f};
      int time_toMove = 1;
@@ -281,7 +284,7 @@
      float start_turning_angle{0.0f};
  
      // Variables for homing
-     float homing_batterythreshold = 3.35f;
+    //  float homing_batterythreshold = 3.35f;
      // float homing_batterythreshold = 2.5f;
  
      // Variables for looking around
@@ -318,41 +321,10 @@
      auto frontReachingEndTime = std::chrono::high_resolution_clock::now();
      auto lookAroundStartTime = std::chrono::high_resolution_clock::now();
      auto lookAroundEndTime = std::chrono::high_resolution_clock::now();
-
-     // Reading from sensors
-     std::mutex readMutex;
-     float front{0};
-     float rear{0};
-     float left{0};
-     float right{0};
-     State cur_state{0.0f, 0.0f};
-     float dist_target{-1.0f};
-     float dist_obs{-1.0f};
-     float dist_chpad{-1.0f};
-     float aimDirection_target{-4.0f};
-     float aimDirection_obs{-4.0f};
-     float aimDirection_chpad{-4.0f};
  
      while (od4.isRunning()) {
          // Sleep for 10 ms to not let the loop run to fast
          std::this_thread::sleep_for(std::chrono::milliseconds(10));
-
-         // Read all data first         
-         {
-            std::lock_guard<std::mutex> lck(readMutex);
-            front = front_r;
-            rear = rear_r;
-            left = left_r;
-            right = right_r;
-            cur_state.yaw = cur_state_r.yaw;
-            cur_state.battery_state = cur_state_r.battery_state;
-            dist_target = dist_target_r;
-            dist_obs = dist_obs_r;
-            dist_chpad = dist_chpad_r;
-            aimDirection_target = aimDirection_target_r;
-            aimDirection_obs = aimDirection_obs_r;
-            aimDirection_chpad = aimDirection_chpad_r;
-        }
  
          /*
              Takeoff
@@ -376,6 +348,12 @@
              - Check from the range recording array
          */
          // Recheck current dist path vector if in turning mode
+         // Clear the vectors in case of memory problems
+         if ( angleFrontState_vec.size() > 2000 )
+            angleFrontState_vec.resize(2000);
+        if ( distPathstate_vec.size() > 2000 )
+            distPathstate_vec.resize(2000);
+
          if ( on_TURNING_MODE && angleFrontState_vec.size() > 0 ){
              // Try to refresh the rear distance
              float rearDist{-1.0f};
@@ -496,7 +474,7 @@
          */
          float safe_dist{0.0f};
          if ( front >= 1.0f )
-             safe_dist = safe_endreach_dist + front / 3 + 0.35f;
+             safe_dist = safe_endreach_dist + front / 4 + 0.35f;
          else
              safe_dist = safe_endreach_dist;
          if ( front <= safe_dist ){
@@ -689,7 +667,7 @@
                          std::cout <<" Try to dodge to the rear..." << std::endl;
                          cur_distToMove = cur_validWay.toRear;
                          if ( cur_distToMove >= 1.0f )
-                             time_toMove = 3;
+                             time_toMove = 4;
                          else
                              time_toMove = 5;
                          Goto(od4, - cur_distToMove * std::cos( cur_state.yaw ), - cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
@@ -719,7 +697,7 @@
                          std::cout <<" Try to dodge to the rear..." << std::endl;
                          cur_distToMove = cur_validWay.toRear;
                          if ( cur_distToMove >= 1.0f )
-                             time_toMove = 3;
+                             time_toMove = 4;
                          else
                              time_toMove = 5;
                          Goto(od4, - cur_distToMove * std::cos( cur_state.yaw ), - cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
@@ -786,7 +764,7 @@
                          std::cout <<" Try to dodge to the rear..." << std::endl;
                          cur_distToMove = cur_validWay.toRear;
                          if ( cur_distToMove >= 1.0f )
-                             time_toMove = 3;
+                             time_toMove = 4;
                          else
                              time_toMove = 5;
                          Goto(od4, - cur_distToMove * std::cos( cur_state.yaw ), - cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
@@ -816,7 +794,7 @@
                          std::cout <<" Try to dodge to the rear..." << std::endl;
                          cur_distToMove = cur_validWay.toRear;
                          if ( cur_distToMove >= 1.0f )
-                             time_toMove = 3;
+                             time_toMove = 4;
                          else
                              time_toMove = 5;
                          Goto(od4, - cur_distToMove * std::cos( cur_state.yaw ), - cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
@@ -1118,12 +1096,13 @@
                      }
                      
                      // continue turning
-                     // std::cout <<" Keep turning with angle diff: " << angleDifference( cur_state.yaw, cur_targetCheckState.targetAngle ) << std::endl; 
+                    //  std::cout <<" Keep turning with angle diff: " << angleDifference( cur_state.yaw, cur_targetCheckState.targetAngle ) << std::endl; 
                      continue;
                  }
                  else{ 
                      // Stop first
                      Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false);
+                     std::this_thread::sleep_for(std::chrono::milliseconds(500));
  
                      // If current front is not goable
                      if ( front <= safe_endreach_dist + 0.7 / 2 ){
@@ -1273,14 +1252,18 @@
              if ( cur_pathReachingState.pathOnGoing == false ){
                  Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false);
                  std::cout <<" Start go to action with front: " << front << std::endl;
-                 cur_distToMove = front;
+                 cur_distToMove = front - safe_endreach_dist / 2.0f;
                  if ( cur_distToMove >= 1.0f )
-                     time_toMove = 3;
+                     time_toMove = 4;
                  else
                      time_toMove = 5;
-                 if ( dist_to_reach > -1.0f ){
-                     cur_distToMove = 0.7f;
-                     time_toMove = 2;
+                 if ( cur_targetCheckState.pointToTarget ){
+                    cur_distToMove = 0.7f;
+                    time_toMove = 2;
+                    if ( front < 0.7f){
+                        cur_distToMove = front - safe_endreach_dist / 2.0f;
+                        time_toMove = 5;
+                    }
                  }
                  Goto(od4, cur_distToMove * std::cos( cur_state.yaw ), cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);
                  cur_pathReachingState.pathOnGoing = true;
@@ -1297,7 +1280,7 @@
                          // Reset flags
                          on_GoTO_MODE = false;
                      }
-                     else if ( std::abs( cur_pathReachingState.startFront - front ) >= 0.6f ){
+                     else if ( std::abs( cur_pathReachingState.startFront - front ) >= 0.6f && front < cur_pathReachingState.startFront ){
                          std::cout <<" Reach target with 0.6 range of current front: " << front << std::endl;
                          Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false);
  
@@ -1305,7 +1288,7 @@
                          on_GoTO_MODE = false;
                      }
                  }
-                 else if ( std::abs( cur_pathReachingState.startFront - front ) >= cur_distToMove - safe_endreach_dist){
+                 else if ( std::abs( cur_pathReachingState.startFront - front ) >= cur_distToMove - safe_endreach_dist && front < cur_pathReachingState.startFront ){
                      // Reach the target, stop current action
                      std::cout <<" Reach target with front distance reached, pre front: " << cur_pathReachingState.startFront << ", cur front: " << front << std::endl;
                      Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false);
@@ -1459,7 +1442,7 @@
                          continue;
                      }
  
-                     if ( std::abs( angleDifference( cur_lookAroundState.preAngle, pair_cand.angle ) ) <= 10.0f / 180 * M_PI ){
+                     if ( std::abs( angleDifference( cur_lookAroundState.preAngle, pair_cand.angle ) ) <= 20.0f / 180 * M_PI ){
                          continue;
                      }
  
@@ -1548,7 +1531,7 @@
                  // If current front is not goable
                  float safe_dist{0.0f};
                  if ( front >= 1.0f )
-                     safe_dist = safe_endreach_dist + front / 3 + 0.35f;
+                     safe_dist = safe_endreach_dist + front / 4 + 0.35f;
                  else
                      safe_dist = safe_endreach_dist;
                  if ( front <= safe_dist ){
@@ -1583,8 +1566,8 @@
                              continue;
                          }
  
-                         if ( std::abs( angleDifference( cur_lookAroundState.preAngle, cur_state.yaw ) ) > 10.0f / 180 * M_PI ){
-                             if ( std::abs( angleDifference( cur_lookAroundState.preAngle, pair_cand.angle ) ) <= 10.0f / 180 * M_PI ){
+                         if ( std::abs( angleDifference( cur_lookAroundState.preAngle, cur_state.yaw ) ) > 20.0f / 180 * M_PI ){
+                             if ( std::abs( angleDifference( cur_lookAroundState.preAngle, pair_cand.angle ) ) <= 20.0f / 180 * M_PI ){
                                  continue;
                              }
                          }
@@ -1611,7 +1594,7 @@
                              }                        
                          }
  
-                         if ( hasObOnPath == false && std::abs( angleDifference( cur_lookAroundState.preAngle, cur_state.yaw ) ) > 10.0f / 180 * M_PI ){
+                         if ( hasObOnPath == false && std::abs( angleDifference( cur_lookAroundState.preAngle, cur_state.yaw ) ) > 20.0f / 180 * M_PI ){
                              // Found the path, turn to that angle
                              cur_lookAroundState.targetAngle = pair_cand.angle;
  
