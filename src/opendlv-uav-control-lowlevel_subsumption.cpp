@@ -1,205 +1,350 @@
+/*
+* Copyright (C) 2018  Christian Berger
+*
+* This program is free software: you can redistribute it and/or modify
+* it under the terms of the GNU General Public License as published by
+* the Free Software Foundation, either version 3 of the License, or
+* (at your option) any later version.
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+* GNU General Public License for more details.
+*
+* You should have received a copy of the GNU General Public License
+* along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#include "cluon-complete.hpp"
+#include "opendlv-standard-message-set.hpp"
+#include <cstdint>
 #include <iostream>
-#include <thread>
-#include <atomic>
-#include <chrono>
+#include <memory>
 #include <mutex>
-#include <cstdlib>
+#include <thread>
+#include <array>
+#include <string>
+#include <sstream>
+#include <vector>
+#include <iterator>
+#include <cmath>
+#include <random>
+#include <chrono>
 
-// 模擬感測器數值與 Crazyflie 控制指令的全域變數
-// In a real implementation, these values would be updated via sensor callbacks.
-std::atomic<float> sensorFront(0.5f);   // Front distance sensor reading
-std::atomic<float> sensorLeft(0.5f);    // Left distance sensor reading
-std::atomic<float> sensorRight(0.5f);   // Right distance sensor reading
-std::atomic<float> sensorRear(0.5f);    // Rear distance sensor reading
-std::atomic<float> batteryState(4.0f);  // Battery voltage
-std::atomic<float> targetDistance(-1.0f);  // Target (green ball or charging pad) distance (-1 means not detected)
-std::atomic<float> targetAngle(-4.0f);       // Target angle (-4 means not detected)
-
-// Atomic flags for each behavior activation status
-std::atomic<bool> dynamicObstacleActive(false); // Highest priority: dynamic obstacle avoidance
-std::atomic<bool> staticObstacleActive(false);    // Static obstacle avoidance
-std::atomic<bool> targetFindingActive(false);     // Target finding (turning toward target)
-std::atomic<bool> frontReachingActive(false);       // Moving forward along a clear path
-std::atomic<bool> lookAroundActive(false);          // Searching for a clear path (low priority)
-
-std::mutex coutMutex; // Mutex to protect console output
-
-// Dummy functions simulating the Crazyflie control commands.
-// In the real system, these functions would send messages via OD4Session.
-void Takeoff(float height, int duration) {
+std::mutex coutMutex;
+void print(const std::string& message) {
     std::lock_guard<std::mutex> lock(coutMutex);
-    std::cout << "[Command] Taking off to height: " << height << std::endl;
-    std::this_thread::sleep_for(std::chrono::milliseconds(duration * 1000));
+    std::cout << message << std::endl;
+}
+ 
+void Takeoff(cluon::OD4Session &od4, float height, int duration){
+    std::ostringstream oss;
+    oss << "Taking off to height: " << height;
+    print( oss.str() );       
+    cluon::data::TimeStamp sampleTime;
+    opendlv::logic::action::CrazyFlieCommand cfcommand;
+    cfcommand.height(height);
+    cfcommand.time(duration);
+    od4.send(cfcommand, sampleTime, 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(duration*1000 + 500));
 }
 
-void Goto(float x, float y, float z, float yaw, int duration) {
-    std::lock_guard<std::mutex> lock(coutMutex);
-    std::cout << "[Command] Goto position: x=" << x << ", y=" << y 
-              << ", z=" << z << ", yaw=" << yaw << std::endl;
-    std::this_thread::sleep_for(std::chrono::milliseconds(duration * 1000));
+void Goto(cluon::OD4Session &od4, float x, float y, float z, float yaw, int duration, int relative = 1, bool isdelay = false, bool verbose = true){
+    if ( verbose ){
+        std::ostringstream oss;
+        oss << "Go to position : x: "<< x << " ,y: " << y << " ,z: " << z << " , yaw: " << yaw;
+        print( oss.str() );       
+    }
+    cluon::data::TimeStamp sampleTime;
+    opendlv::logic::action::CrazyFlieCommand cfcommand;
+    cfcommand.x(x);
+    cfcommand.y(y);
+    cfcommand.z(z);
+    cfcommand.yaw(yaw);
+    cfcommand.time(duration);
+    // cfcommand.relative(relative);
+    od4.send(cfcommand, sampleTime, 3);
+    if ( isdelay ){
+        std::this_thread::sleep_for(std::chrono::milliseconds(duration*1000 + 500));
+    }
 }
 
-void Landing(float height, int duration) {
-    std::lock_guard<std::mutex> lock(coutMutex);
-    std::cout << "[Command] Landing to height: " << height << std::endl;
-    std::this_thread::sleep_for(std::chrono::milliseconds(duration * 1000));
+void Landing(cluon::OD4Session &od4, float height, int duration){
+    std::ostringstream oss;
+    oss << "Landing to height: " << height;
+    print( oss.str() );      
+    cluon::data::TimeStamp sampleTime;
+    opendlv::logic::action::CrazyFlieCommand cfcommand;
+    cfcommand.height(height);
+    cfcommand.time(duration);
+    od4.send(cfcommand, sampleTime, 1);
+    std::this_thread::sleep_for(std::chrono::milliseconds(duration*1000 + 500));
 }
 
-void Stopping() {
-    std::lock_guard<std::mutex> lock(coutMutex);
-    std::cout << "[Command] Stopping" << std::endl;
+void Stopping(cluon::OD4Session &od4){
+    std::ostringstream oss;
+    oss << "Stopping." << height;
+    print( oss.str() );      
+    cluon::data::TimeStamp sampleTime;
+    opendlv::logic::action::CrazyFlieCommand cfcommand;
+    od4.send(cfcommand, sampleTime, 2);
     std::this_thread::sleep_for(std::chrono::milliseconds(3000));
 }
 
-/*
-    Behavior: Dynamic Obstacle Avoidance
-    - This thread monitors sensor data for sudden obstacles (e.g., detected via vision or IR).
-    - If an obstacle is detected too close in front, execute a dynamic dodge maneuver.
-    - This behavior has the highest priority.
-*/
-void dynamicObstacleAvoidance() {
-    while (true) {
-        // Check condition: if front sensor reading is below a critical threshold (e.g., 0.3 meters)
-        if (sensorFront.load() < 0.3f) {
-            dynamicObstacleActive = true;
-            {
-                std::lock_guard<std::mutex> lock(coutMutex);
-                std::cout << "[Dynamic Obstacle] Obstacle detected, executing dynamic avoidance maneuver." << std::endl;
-            }
-            // Execute a dynamic avoidance maneuver (e.g., dodge to the left)
-            Goto(-0.2f, 0.2f, 0.0f, 0.0f, 1);
-            // After maneuver, reset the flag
-            dynamicObstacleActive = false;
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        } else {
-            dynamicObstacleActive = false;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
+float angleDifference(float angle1, float angle2) {
+    float diff = angle2 - angle1;
+    diff = std::fmod(diff + M_PI, 2 * M_PI);
+    if (diff < 0)
+        diff += 2 * M_PI;
+    diff -= M_PI;
+    return diff;
 }
 
-/*
-    Behavior: Static Obstacle Avoidance
-    - This thread monitors for walls or static obstacles via rangefinder values.
-    - If any sensor (front, left, or right) is too close, execute a static obstacle avoidance maneuver.
-    - This behavior is overridden by dynamic avoidance.
-*/
-void staticObstacleAvoidance() {
-    while (true) {
-        if (sensorFront.load() < 0.5f || sensorLeft.load() < 0.3f || sensorRight.load() < 0.3f) {
-            staticObstacleActive = true;
-            {
-                std::lock_guard<std::mutex> lock(coutMutex);
-                std::cout << "[Static Obstacle] Wall detected, executing static avoidance maneuver." << std::endl;
-            }
-            // Execute static avoidance (for example, stop movement)
-            Goto(0.0f, 0.0f, 0.0f, 0.0f, 0); // Stop command
-            staticObstacleActive = false;
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        } else {
-            staticObstacleActive = false;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
+float wrap_angle(float angle) {
+    return (angle > M_PI) ? (angle - 2 * M_PI) : angle;
 }
 
-/*
-    Behavior: Target Finding
-    - This thread monitors for a valid target (e.g., green ball or charging pad) if detected.
-    - If a target exists and the battery state is above the takeoff threshold,
-      the Crazyflie will turn toward the target.
-*/
-void targetFinding() {
-    while (true) {
-        if (targetDistance.load() > 0 && batteryState.load() > 3.8f) {
-            targetFindingActive = true;
-            {
-                std::lock_guard<std::mutex> lock(coutMutex);
-                std::cout << "[Target Finding] Target detected, executing target finding behavior." << std::endl;
-            }
-            // Turn towards target (using targetAngle)
-            Goto(0.0f, 0.0f, 0.0f, targetAngle.load(), 2);
-            targetFindingActive = false;
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        } else {
-            targetFindingActive = false;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+int32_t main(int32_t argc, char **argv) {
+    int32_t retCode{1};
+    auto commandlineArguments = cluon::getCommandlineArguments(argc, argv);
+    if ( (0 == commandlineArguments.count("cid")) ) {
+        std::cerr << "You should include the cid to start communicate in OD4Session" << std::endl;
+        return retCode;
     }
-}
 
-/*
-    Behavior: Front Reaching
-    - When the path is clear (e.g., front sensor reading is high enough) and no higher priority behavior is active,
-      the Crazyflie moves forward along its current heading.
-*/
-void frontReaching() {
-    while (true) {
-        if (sensorFront.load() > 0.7f && !dynamicObstacleActive.load() && !staticObstacleActive.load()) {
-            frontReachingActive = true;
-            {
-                std::lock_guard<std::mutex> lock(coutMutex);
-                std::cout << "[Front Reaching] Path is clear, executing forward movement." << std::endl;
-            }
-            // Move forward command
-            Goto(0.5f, 0.0f, 0.0f, 0.0f, 2);
-            frontReachingActive = false;
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        } else {
-            frontReachingActive = false;
+    // Interface to a running OpenDaVINCI session; here, you can send and receive messages.
+    cluon::OD4Session od4{static_cast<uint16_t>(std::stoi(commandlineArguments["cid"]))};
+
+    // Handler to receive distance readings (realized as C++ lambda).
+    std::mutex distancesMutex;
+    float front_r{0};
+    float rear_r{0};
+    float left_r{0};
+    float right_r{0};
+    auto onDistance = [&distancesMutex, &front_r, &rear_r, &left_r, &right_r](cluon::data::Envelope &&env){
+        auto senderStamp = env.senderStamp();
+        // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
+        opendlv::proxy::DistanceReading dr = cluon::extractMessage<opendlv::proxy::DistanceReading>(std::move(env));
+        // Store distance readings.
+        std::lock_guard<std::mutex> lck(distancesMutex);
+        switch (senderStamp) {
+            case 0: front_r = dr.distance(); break;
+            case 1: rear_r = dr.distance(); break;
+            case 2: left_r = dr.distance(); break;
+            case 3: right_r = dr.distance(); break;
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-}
+    };
+    // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
+    od4.dataTrigger(opendlv::proxy::DistanceReading::ID(), onDistance);
 
-/*
-    Behavior: Look Around
-    - When no other behavior is active, the Crazyflie performs a look-around maneuver.
-    - This behavior rotates the drone gradually (e.g., 360° over time) to search for a clear path or target.
-*/
-void lookAround() {
-    while (true) {
-        if (!dynamicObstacleActive.load() && !staticObstacleActive.load() &&
-            !targetFindingActive.load() && !frontReachingActive.load()) {
-            lookAroundActive = true;
-            {
-                std::lock_guard<std::mutex> lock(coutMutex);
-                std::cout << "[Look Around] No active higher-priority behavior, executing look-around." << std::endl;
-            }
-            // Rotate slightly to search for a clear path/target
-            Goto(0.0f, 0.0f, 0.0f, 0.2f, 2);
-            lookAroundActive = false;
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    // Handler to receive state readings (realized as C++ lambda).
+    struct State {
+        float yaw;
+        float battery_state;
+    };
+    std::mutex stateMutex;
+    State cur_state_r{0.0f, 0.0f};
+    auto onStateRead = [&stateMutex, &cur_state_r](cluon::data::Envelope &&env){
+        auto senderStamp = env.senderStamp();
+        // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
+        opendlv::logic::sensation::CrazyFlieState cfState = cluon::extractMessage<opendlv::logic::sensation::CrazyFlieState>(std::move(env));
+        // Store distance readings.
+        std::lock_guard<std::mutex> lck(stateMutex);
+        cur_state_r.yaw = cfState.cur_yaw();
+        cur_state_r.battery_state = cfState.battery_state();
+    };
+    // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
+    od4.dataTrigger(opendlv::logic::sensation::CrazyFlieState::ID(), onStateRead);
+
+    float dist_target_r{-1.0f};
+    float dist_obs_r{-1.0f};
+    float dist_chpad_r{-1.0f};
+    std::mutex distMutex;
+    auto onDistRead = [&distMutex, &dist_target_r, &dist_obs_r, &dist_chpad_r](cluon::data::Envelope &&env){
+        auto senderStamp = env.senderStamp();
+        // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
+        opendlv::logic::action::PreviewPoint pPtmessage = cluon::extractMessage<opendlv::logic::action::PreviewPoint>(std::move(env));
+        
+        // Store distance readings.
+        std::lock_guard<std::mutex> lck(distMutex);
+        if ( senderStamp == 0 ){
+           dist_target_r = pPtmessage.distance();
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-}
-
-/*
-    Arbitrator
-    - This thread continuously checks the flags of each behavior and,根據優先順序，
-      保證高優先行為（例如動態障礙避讓）能夠中斷並覆蓋低優先行為。
-    - 由於各行為函式皆獨立執行，本範例的仲裁器只用來延遲或避免衝突。
-*/
-void arbitrator() {
-    while (true) {
-        // If a high priority behavior is active, simply wait.
-        if (dynamicObstacleActive.load() || staticObstacleActive.load() ||
-            targetFindingActive.load() || frontReachingActive.load() ||
-            lookAroundActive.load()) {
-            // In a實際系統中，此處可調整調度策略
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            continue;
+        else if ( senderStamp == 1 ){
+           dist_obs_r = pPtmessage.distance();
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    }
-}
+        else if ( senderStamp == 2 ){
+           dist_chpad_r = pPtmessage.distance();
+        }
+    };
+    // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
+    od4.dataTrigger(opendlv::logic::action::PreviewPoint::ID(), onDistRead);
 
-int main() {
+    float aimDirection_target_r{-4.0f};
+    float aimDirection_obs_r{-4.0f};
+    float aimDirection_chpad_r{-4.0f};
+    std::mutex aimDirectionMutex;
+    auto onAimDirectionRead = [&aimDirectionMutex, &aimDirection_target_r, &aimDirection_obs_r, &aimDirection_chpad_r](cluon::data::Envelope &&env){
+        auto senderStamp = env.senderStamp();
+        // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
+        opendlv::logic::action::AimDirection aDirmessage = cluon::extractMessage<opendlv::logic::action::AimDirection>(std::move(env));
+        
+        // Store aim direction readings.
+        std::lock_guard<std::mutex> lck(aimDirectionMutex);
+        if ( senderStamp == 0 ){
+           aimDirection_target_r = aDirmessage.azimuthAngle();
+        }
+        else if ( senderStamp == 1 ){
+           aimDirection_obs_r = aDirmessage.azimuthAngle();
+        }
+        else if ( senderStamp == 2 ){
+           aimDirection_chpad_r = aDirmessage.azimuthAngle();
+        }
+    };
+    // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
+    od4.dataTrigger(opendlv::logic::action::AimDirection::ID(), onAimDirectionRead);
+
+    // Takeoff flags
+    bool hasTakeoff = false;
+    float takeoff_batterythreshold = 3.6f;
+
+    // Varibles to record current valid ranges
+    struct distPathState {
+        float dist_valid_onPath;
+        float dist_valid_devPath;
+    };
+    std::vector<distPathState> distPathstate_vec;
+    struct ValidWay { 
+        float toLeft;
+        float toRight;
+        float toRear;
+    };
+    ValidWay cur_validWay = {-1.0f, -1.0f, -1.0f};
+    bool on_GoTO_MODE = false;
+    bool on_TURNING_MODE = false;
+
+    // Variables for static obstacles avoidance
+    float safe_endreach_dist = 0.27;
+    float safe_endreach_LR_dist = 0.1;
+    float cur_distToMove{0.0f};
+    int time_toMove = 1;
+    struct preDist {
+        float left;
+        float right;
+    };
+    preDist cur_preDist = {-1.0f, -1.0f};
+    struct ReachEndState {
+        bool reachFront;
+        bool reachLeft;
+        bool reachRight;
+        bool reachRear;
+    };
+    ReachEndState cur_reachEndState = { false, false, false, false };
+
+    // Variables for dynamic obstacles avoidance
+    float dodgeDist{0.0f};
+    float dodgeDist_UP{0.0f};
+    bool has_dodgeToRear = false;
+    enum DodgeType {
+        DODGE_STOP,
+        DODGE_LEFT,
+        DODGE_RIGHT,
+        DODGE_REAR,
+        DODGE_UP,
+        DODGE_NONE
+    };
+    DodgeType cur_dodgeType = DODGE_NONE;
+    struct obsState {
+        float dist_obs;
+        float aimDirection_obs;
+    };
+    obsState cur_obsState = { -1.0f, -1.0f };
+    bool has_possibleInterrupt = false;
+    bool has_InterruptNeedToReDo = false;
+
+    // Variables for front reaching
+    struct pathReachingState {
+        bool pathReadyToGo;
+        bool pathOnGoing;
+        float startFront;
+    };
+    pathReachingState cur_pathReachingState = {false, false, -1.0f};
+
+    // Variables for target finding
+    struct targetCheckState {
+        bool aimTurnStarted;
+        bool pointToTarget;
+        bool turnStarted;
+        float startAngle;
+        float cur_aimDiff;
+        float ang_toTurn;
+        float targetAngle;
+    };
+    targetCheckState cur_targetCheckState = {false, false, false, -1.0f, 100.0f / 180.0f * M_PI, -1.0f, -1.0f};
+    float start_turning_angle{0.0f};
+
+    // Variables for homing
+    float homing_batterythreshold = 3.35f;
+    // float homing_batterythreshold = 2.5f;
+
+    // Variables for looking around
+    struct angleFrontState {
+        float angle;
+        float front;
+    };    
+    std::vector<angleFrontState> angleFrontState_vec;
+    struct lookAroundState {
+        bool clearPathCheckStarted;
+        bool turnStarted;
+        bool smallToBig;
+        float preAngle;
+        float startAngle;
+        float targetAngle;
+        int nTimer;
+    };
+    lookAroundState cur_lookAroundState = {false, false, false, -1.0f, -10.0f, -1.0f, 0};
+    float ori_front{0.0f};
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<int> distribution (0, 1);
+
+    // Timer to record time of each behaviour
+    auto taskStartTime = std::chrono::high_resolution_clock::now();
+    auto taskEndTime = std::chrono::high_resolution_clock::now();
+    auto obsStaticStartTime = std::chrono::high_resolution_clock::now();
+    auto obsStaticEndTime = std::chrono::high_resolution_clock::now();
+    auto obsDynamicStartTime = std::chrono::high_resolution_clock::now();
+    auto obsDynamicEndTime = std::chrono::high_resolution_clock::now();
+    auto targetFindingStartTime = std::chrono::high_resolution_clock::now();
+    auto targetFindingEndTime = std::chrono::high_resolution_clock::now();
+    auto frontReachingStartTime = std::chrono::high_resolution_clock::now();
+    auto frontReachingEndTime = std::chrono::high_resolution_clock::now();
+    auto lookAroundStartTime = std::chrono::high_resolution_clock::now();
+    auto lookAroundEndTime = std::chrono::high_resolution_clock::now();
+
+    // Reading from sensors
+    std::mutex readMutex;
+    float front{0};
+    float rear{0};
+    float left{0};
+    float right{0};
+    State cur_state{0.0f, 0.0f};
+    float dist_target{-1.0f};
+    float dist_obs{-1.0f};
+    float dist_chpad{-1.0f};
+    float aimDirection_target{-4.0f};
+    float aimDirection_obs{-4.0f};
+    float aimDirection_chpad{-4.0f};
+
+
     // 初始動作：起飛
     Takeoff(1.0f, 3);
 
     // 建立各行為的執行緒
+    std::thread t([&value]() {
+        std::cout << "執行緒中的值: " << value << std::endl;
+    });
+
     std::thread t_dynamic(dynamicObstacleAvoidance);
     std::thread t_static(staticObstacleAvoidance);
     std::thread t_target(targetFinding);
