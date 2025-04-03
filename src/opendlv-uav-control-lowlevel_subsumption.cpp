@@ -37,23 +37,27 @@ void print(const std::string& message) {
     std::cout << message << std::endl;
 }
  
-void Takeoff(cluon::OD4Session &od4, float height, int duration){
+std::mutex od4Mutex; // Mutex to protect shared access to od4
+void Takeoff(std::shared_ptr<cluon::OD4Session> od4, float height, int duration){
     std::ostringstream oss;
     oss << "Taking off to height: " << height;
-    print( oss.str() );       
+    print( oss.str() );     
     cluon::data::TimeStamp sampleTime;
     opendlv::logic::action::CrazyFlieCommand cfcommand;
     cfcommand.height(height);
     cfcommand.time(duration);
-    od4.send(cfcommand, sampleTime, 0);
+    {
+        std::lock_guard<std::mutex> lck(od4Mutex);
+        od4->send(cfcommand, sampleTime, 0);
+    }
     std::this_thread::sleep_for(std::chrono::milliseconds(duration*1000 + 500));
 }
 
-void Goto(cluon::OD4Session &od4, float x, float y, float z, float yaw, int duration, int relative = 1, bool isdelay = false, bool verbose = true){
+void Goto(std::shared_ptr<cluon::OD4Session> od4, float x, float y, float z, float yaw, int duration, int relative = 1, bool isdelay = false, bool verbose = true){
     if ( verbose ){
         std::ostringstream oss;
         oss << "Go to position : x: "<< x << " ,y: " << y << " ,z: " << z << " , yaw: " << yaw;
-        print( oss.str() );       
+        print( oss.str() );     
     }
     cluon::data::TimeStamp sampleTime;
     opendlv::logic::action::CrazyFlieCommand cfcommand;
@@ -63,31 +67,40 @@ void Goto(cluon::OD4Session &od4, float x, float y, float z, float yaw, int dura
     cfcommand.yaw(yaw);
     cfcommand.time(duration);
     // cfcommand.relative(relative);
-    od4.send(cfcommand, sampleTime, 3);
+    {
+        std::lock_guard<std::mutex> lck(od4Mutex);
+        od4->send(cfcommand, sampleTime, 3);
+    }
     if ( isdelay ){
         std::this_thread::sleep_for(std::chrono::milliseconds(duration*1000 + 500));
     }
 }
 
-void Landing(cluon::OD4Session &od4, float height, int duration){
+void Landing(std::shared_ptr<cluon::OD4Session> od4, float height, int duration){
     std::ostringstream oss;
     oss << "Landing to height: " << height;
-    print( oss.str() );      
+    print( oss.str() );     
     cluon::data::TimeStamp sampleTime;
     opendlv::logic::action::CrazyFlieCommand cfcommand;
     cfcommand.height(height);
     cfcommand.time(duration);
-    od4.send(cfcommand, sampleTime, 1);
+    {
+        std::lock_guard<std::mutex> lck(od4Mutex);
+        od4->send(cfcommand, sampleTime, 1);
+    }
     std::this_thread::sleep_for(std::chrono::milliseconds(duration*1000 + 500));
 }
 
-void Stopping(cluon::OD4Session &od4){
+void Stopping(std::shared_ptr<cluon::OD4Session> od4){
     std::ostringstream oss;
     oss << "Stopping." << height;
-    print( oss.str() );      
+    print( oss.str() );     
     cluon::data::TimeStamp sampleTime;
     opendlv::logic::action::CrazyFlieCommand cfcommand;
-    od4.send(cfcommand, sampleTime, 2);
+    {
+        std::lock_guard<std::mutex> lck(od4Mutex);
+        od4->send(cfcommand, sampleTime, 2);
+    }
     std::this_thread::sleep_for(std::chrono::milliseconds(3000));
 }
 
@@ -116,27 +129,21 @@ int32_t main(int32_t argc, char **argv) {
     const float takeoff_batterythreshold = (commandlineArguments.count("tbat") != 0) ? std::stof(commandlineArguments["tbat"]) : 3.6;
 
     // Interface to a running OpenDaVINCI session; here, you can send and receive messages.
-    // cluon::OD4Session od4{static_cast<uint16_t>(std::stoi(commandlineArguments["cid"]))};
-    auto od4 = std::make_shared<cluon::OD4Session>(static_cast<uint16_t>(std::stoi(commandlineArguments["cid"])));
-
-    std::atomic<bool> staticAvoidanceActive(false);
-    std::atomic<bool> dynamicAvoidanceActive(false);
-    std::atomic<bool> frontReachingActive(false);
-    std::atomic<bool> targetFindingActive(false);
-    std::atomic<bool> lookingAroundActive(false);
+    std::shared_ptr<cluon::OD4Session> od4 = std::make_shared<cluon::OD4Session>(static_cast<uint16_t>(std::stoi(commandlineArguments["cid"])));
+    //  cluon::OD4Session od4{static_cast<uint16_t>(std::stoi(commandlineArguments["cid"]))};
 
     // Handler to receive distance readings (realized as C++ lambda).
     std::mutex distancesMutex;
-    float front{0};
-    float rear{0};
-    float left{0};
-    float right{0};
+    std::atomic<float> front{0};
+    std::atomic<float> rear{0};
+    std::atomic<float> left{0};
+    std::atomic<float> right{0};
     auto onDistance = [&distancesMutex, &front, &rear, &left, &right](cluon::data::Envelope &&env){
         auto senderStamp = env.senderStamp();
         // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
         opendlv::proxy::DistanceReading dr = cluon::extractMessage<opendlv::proxy::DistanceReading>(std::move(env));
         // Store distance readings.
-        std::lock_guard<std::mutex> lck(distancesMutex);
+       //  std::lock_guard<std::mutex> lck(distancesMutex);
         switch (senderStamp) {
             case 0: front = dr.distance(); break;
             case 1: rear = dr.distance(); break;
@@ -145,30 +152,32 @@ int32_t main(int32_t argc, char **argv) {
         }
     };
     // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
-    od4.dataTrigger(opendlv::proxy::DistanceReading::ID(), onDistance);
+    od4->dataTrigger(opendlv::proxy::DistanceReading::ID(), onDistance);
 
     // Handler to receive state readings (realized as C++ lambda).
-    struct State {
-        float yaw;
-        float battery_state;
-    };
+    //  struct State {
+    //     std::atomic<float> yaw{0.0f};
+    //     std::atomic<float> battery_state{0.0f};
+    //  };
     std::mutex stateMutex;
-    State cur_state{0.0f, 0.0f};
-    auto onStateRead = [&stateMutex, &cur_state](cluon::data::Envelope &&env){
+    std::atomic<float> cur_state_yaw{0.0f};
+    std::atomic<float> cur_state_battery_state{0.0f};
+    auto onStateRead = [&cur_state_yaw, &cur_state_battery_state](cluon::data::Envelope &&env){
         auto senderStamp = env.senderStamp();
         // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
         opendlv::logic::sensation::CrazyFlieState cfState = cluon::extractMessage<opendlv::logic::sensation::CrazyFlieState>(std::move(env));
         // Store distance readings.
-        std::lock_guard<std::mutex> lck(stateMutex);
-        cur_state.yaw = cfState.cur_yaw();
-        cur_state.battery_state = cfState.battery_state();
+        //  std::lock_guard<std::mutex> lck(stateMutex);
+        cur_state_yaw = cfState.cur_yaw();
+        cur_state_battery_state = cfState.battery_state();
+        //  std::cout <<" Current angle: " <<  cur_state_r.yaw << std::endl; 
     };
     // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
-    od4.dataTrigger(opendlv::logic::sensation::CrazyFlieState::ID(), onStateRead);
+    od4->dataTrigger(opendlv::logic::sensation::CrazyFlieState::ID(), onStateRead);
 
-    float dist_target{-1.0f};
-    float dist_obs{-1.0f};
-    float dist_chpad{-1.0f};
+    std::atomic<float> dist_target{-1.0f};
+    std::atomic<float> dist_obs{-1.0f};
+    std::atomic<float> dist_chpad{-1.0f};
     std::mutex distMutex;
     auto onDistRead = [&distMutex, &dist_target, &dist_obs, &dist_chpad](cluon::data::Envelope &&env){
         auto senderStamp = env.senderStamp();
@@ -176,7 +185,7 @@ int32_t main(int32_t argc, char **argv) {
         opendlv::logic::action::PreviewPoint pPtmessage = cluon::extractMessage<opendlv::logic::action::PreviewPoint>(std::move(env));
         
         // Store distance readings.
-        std::lock_guard<std::mutex> lck(distMutex);
+        //  std::lock_guard<std::mutex> lck(distMutex);
         if ( senderStamp == 0 ){
             dist_target = pPtmessage.distance();
         }
@@ -188,11 +197,11 @@ int32_t main(int32_t argc, char **argv) {
         }
     };
     // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
-    od4.dataTrigger(opendlv::logic::action::PreviewPoint::ID(), onDistRead);
+    od4->dataTrigger(opendlv::logic::action::PreviewPoint::ID(), onDistRead);
 
-    float aimDirection_target{-4.0f};
-    float aimDirection_obs{-4.0f};
-    float aimDirection_chpad{-4.0f};
+    std::atomic<float> aimDirection_target{-4.0f};
+    std::atomic<float> aimDirection_obs{-4.0f};
+    std::atomic<float> aimDirection_chpad{-4.0f};
     std::mutex aimDirectionMutex;
     auto onAimDirectionRead = [&aimDirectionMutex, &aimDirection_target, &aimDirection_obs, &aimDirection_chpad](cluon::data::Envelope &&env){
         auto senderStamp = env.senderStamp();
@@ -200,7 +209,7 @@ int32_t main(int32_t argc, char **argv) {
         opendlv::logic::action::AimDirection aDirmessage = cluon::extractMessage<opendlv::logic::action::AimDirection>(std::move(env));
         
         // Store aim direction readings.
-        std::lock_guard<std::mutex> lck(aimDirectionMutex);
+        //  std::lock_guard<std::mutex> lck(aimDirectionMutex);
         if ( senderStamp == 0 ){
             aimDirection_target = aDirmessage.azimuthAngle();
         }
@@ -212,7 +221,22 @@ int32_t main(int32_t argc, char **argv) {
         }
     };
     // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
-    od4.dataTrigger(opendlv::logic::action::AimDirection::ID(), onAimDirectionRead);
+    od4->dataTrigger(opendlv::logic::action::AimDirection::ID(), onAimDirectionRead);
+
+    std::atomic<int16_t> nTargetTimer{0};
+    auto onTargetTimerRead = [&nTargetTimer](cluon::data::Envelope &&env){
+        auto senderStamp = env.senderStamp();
+        // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
+        opendlv::logic::sensation::TargetFoundState tStatemessage = cluon::extractMessage<opendlv::logic::sensation::TargetFoundState>(std::move(env));
+        
+        // Store aim direction readings.
+        //  std::lock_guard<std::mutex> lck(aimDirectionMutex);
+        if ( senderStamp == 0 ){
+        nTargetTimer = tStatemessage.target_found_count();
+        }
+    };
+    // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
+    od4->dataTrigger(opendlv::logic::sensation::TargetFoundState::ID(), onTargetTimerRead);
 
     // Takeoff flags
     bool hasTakeoff = false;
@@ -368,152 +392,190 @@ int32_t main(int32_t argc, char **argv) {
         return retCode;
     }
 
-    // 建立各行為的執行緒
-    std::thread ValidDirectionCheckTask([&validRangeMutex, &cur_validRangeStruct,
+    // Thread for valid direction check
+    std::thread ValidDirectionCheckTask([od4, 
+                                         &cur_state_yaw, &stateMutex
+                                         &front, &rear, &left, &right, &distancesMutex,
+                                         &validRangeMutex, &cur_validRangeStruct,
                                          &lookAroundMutex, &cur_lookAroundStruct]() {
-        // Variables for valid range check
-        std::vector<distPathState> distPathstate_vec;
-        ValidWay cur_validWay = {-1.0f, -1.0f, -1.0f};
-        bool on_GoTO_MODE = false;
-        bool on_TURNING_MODE = false;
+        while(od4->isRunning()){
+            // Variables for current yaw
+            std::atomic<float> cur_yaw{0.0f};
+            {
+                std::lock_guard<std::mutex> lck(stateMutex);
+                cur_yaw.store(cur_state_yaw, std::memory_order_relaxed);
+            }
 
-        // Variables for look around
-        std::vector<angleFrontState> angleFrontState_vec;
-        lookAroundState cur_lookAroundState = {false, false, false, -1.0f, -10.0f, -1.0f, 0};
-        float ori_front{0.0f};
+            // Variables for current distances
+            std::atomic<float> cur_front{0.0f};
+            std::atomic<float> cur_rear{0.0f};
+            std::atomic<float> cur_left{0.0f};
+            std::atomic<float> cur_right{0.0f};
+            {
+                std::lock_guard<std::mutex> lck(distancesMutex);
+                cur_front.store(front, std::memory_order_relaxed);
+                cur_rear.store(rear, std::memory_order_relaxed);
+                cur_left.store(left, std::memory_order_relaxed);
+                cur_right.store(right, std::memory_order_relaxed);
+            }
 
-        {
-            std::lock_guard<std::mutex> lock(validRangeMutex);
-            distPathstate_vec = cur_validRangeStruct.distPathstate_vec;
-            cur_validWay = cur_validRangeStruct.cur_validWay;
-            on_GoTO_MODE = cur_validRangeStruct.on_GoTO_MODE;
-            on_TURNING_MODE = cur_validRangeStruct.on_TURNING_MODE;
-        }
+            // Variables for valid range check
+            std::vector<distPathState> distPathstate_vec;
+            ValidWay cur_validWay = {-1.0f, -1.0f, -1.0f};
+            bool on_GoTO_MODE = false;
+            bool on_TURNING_MODE = false;    
+            {
+                std::lock_guard<std::mutex> lock(validRangeMutex);
+                distPathstate_vec = cur_validRangeStruct.distPathstate_vec;
+                cur_validWay = cur_validRangeStruct.cur_validWay;
+                on_GoTO_MODE = cur_validRangeStruct.on_GoTO_MODE;
+                on_TURNING_MODE = cur_validRangeStruct.on_TURNING_MODE;
+            }
 
-        {
-            std::lock_guard<std::mutex> lock(lookAroundMutex);
-            angleFrontState_vec = cur_lookAroundStruct.angleFrontState_vec;
-            cur_lookAroundState = cur_lookAroundStruct.cur_lookAroundState;
-            ori_front = cur_validRangeStruct.ori_front;
-        }
+            // Variables for look around
+            std::vector<angleFrontState> angleFrontState_vec;
+            lookAroundState cur_lookAroundState = {false, false, false, -1.0f, -10.0f, -1.0f, 0};        
+            float ori_front{0.0f};    
+            {
+                std::lock_guard<std::mutex> lock(lookAroundMutex);
+                angleFrontState_vec = cur_lookAroundStruct.angleFrontState_vec;
+                cur_lookAroundState = cur_lookAroundStruct.cur_lookAroundState;
+                ori_front = cur_validRangeStruct.ori_front;
+            }
 
-        if ( angleFrontState_vec.size() > 2000 )
-            angleFrontState_vec.resize(2000);
-        if ( distPathstate_vec.size() > 2000 )
-            distPathstate_vec.resize(2000);
+            if ( angleFrontState_vec.size() > 2000 )
+                angleFrontState_vec.resize(2000);
+            if ( distPathstate_vec.size() > 2000 )
+                distPathstate_vec.resize(2000);
 
-        if ( on_TURNING_MODE && angleFrontState_vec.size() > 0 ){
-            // Try to refresh the rear distance
-            float rearDist{-1.0f};
-            float angMin = std::abs( std::atan2( 0.1f, front ) );
-            for ( const auto& pair : angleFrontState_vec ){
-                // std::cout <<" Current angle to check, angle: " << pair.angle << ", front: " << pair.front << std::endl; 
-                float angDev = std::abs( angleDifference( pair.angle, cur_state.yaw ) );
-                if ( angDev >= 135.0f / 180.0f * M_PI ){
-                    if ( pair.front * std::sin( angDev ) > 0.1f ){
+            if ( on_TURNING_MODE && angleFrontState_vec.size() > 0 ){
+                // Try to refresh the rear distance
+                float rearDist{-1.0f};
+                float angMin = std::abs( std::atan2( 0.1f, cur_front ) );
+                for ( const auto& pair : angleFrontState_vec ){
+                    // std::cout <<" Current angle to check, angle: " << pair.angle << ", front: " << pair.front << std::endl; 
+                    float angDev = std::abs( angleDifference( pair.angle, cur_yaw ) );
+                    if ( angDev >= 135.0f / 180.0f * M_PI ){
+                        if ( pair.front * std::sin( angDev ) > 0.1f ){
+                            continue;
+                        }
+                    }  
+                    else if ( angDev < 135.0f / 180.0f * M_PI ){
                         continue;
                     }
-                }  
-                else if ( angDev < 135.0f / 180.0f * M_PI ){
-                    continue;
+
+                    if ( std::abs( pair.front * std::cos( angDev ) ) < rearDist || rearDist == -1.0f ){
+                        rearDist = std::abs( pair.front * std::cos( angDev ) );
+                    }                   
+                }
+                cur_validWay.toRear = rearDist;
+
+                // Record path related information
+                ori_front = cur_front;
+                if ( distPathstate_vec.size() > 0 ){
+                    distPathstate_vec.clear();
+                }
+                for ( const auto& pair : angleFrontState_vec ){
+                    float angDev = angleDifference( cur_yaw, pair.angle );
+                    // std::cout <<" Current angle difference: " << angDev << ", front: " <<pair.front << ", current angle: " << cur_yaw << std::endl; 
+                    // std::cout <<" Cosine(On Path): " << pair.front*std::cos( angDev ) << ", Sine(Dev Path): " << pair.front*std::sin( angDev ) << std::endl; 
+                    distPathState pstate = { pair.front*std::cos( angDev ), pair.front*std::sin( angDev ) }; 
+                    distPathstate_vec.insert( distPathstate_vec.begin(), pstate );              
+                }
+            }
+
+            // Refresh valid left/right/rear on the way
+            if ( distPathstate_vec.size() > 0 && on_GoTO_MODE ){
+                float cur_dist_onPath = cur_front - ori_front;
+                bool hasFoundOnPath = false;
+                for ( auto& state : distPathstate_vec ){
+                    if ( std::abs( state.dist_valid_onPath - cur_dist_onPath ) > 0.01f ){
+                        continue;
+                    }
+                    // std::cout << "Current path progress: " << cur_dist_onPath << " with original devPath:" << state.dist_valid_devPath << ", left: " << left << ", right: " << right << std::endl;
+                    // std::cout <<" Distance to be modified, right: " << right << ", left: " << left << ", path progress: " << std::abs( state.dist_valid_onPath - cur_dist_onPath ) << std::endl; 
+
+                    hasFoundOnPath = true;
+                    if ( state.dist_valid_devPath <= 0.0f ){
+                        state.dist_valid_devPath = -cur_right;
+                    }
+                    else{
+                        state.dist_valid_devPath = cur_left; 
+                    }
                 }
 
-                if ( std::abs( pair.front * std::cos( angDev ) ) < rearDist || rearDist == -1.0f ){
-                    rearDist = std::abs( pair.front * std::cos( angDev ) );
-                }                   
-            }
-            cur_validWay.toRear = rearDist;
+                if ( hasFoundOnPath == false ){
+                    distPathState pstate = { cur_dist_onPath, -cur_right }; 
+                    distPathstate_vec.insert( distPathstate_vec.begin(), pstate ); 
+                    pstate = { cur_dist_onPath, left }; 
+                    distPathstate_vec.insert( distPathstate_vec.begin(), pstate ); 
+                }
 
-            // Record path related information
-            ori_front = front;
+                // Refresh rear
+                cur_validWay.toRear = cur_rear;
+                // std::cout <<" Refresh distpath on goto mode with rear: " << cur_validWay.toRear << std::endl;
+            }
+
+            // Start valid way checking
             if ( distPathstate_vec.size() > 0 ){
-                distPathstate_vec.clear();
-            }
-            for ( const auto& pair : angleFrontState_vec ){
-                float angDev = angleDifference( cur_state.yaw, pair.angle );
-                // std::cout <<" Current angle difference: " << angDev << ", front: " <<pair.front << ", current angle: " << cur_state.yaw << std::endl; 
-                // std::cout <<" Cosine(On Path): " << pair.front*std::cos( angDev ) << ", Sine(Dev Path): " << pair.front*std::sin( angDev ) << std::endl; 
-                distPathState pstate = { pair.front*std::cos( angDev ), pair.front*std::sin( angDev ) }; 
-                distPathstate_vec.insert( distPathstate_vec.begin(), pstate );              
-            }
-        }
+                cur_validWay.toLeft = -1.0f;
+                cur_validWay.toRight = -1.0f;
 
-        // Refresh valid left/right/rear on the way
-        if ( distPathstate_vec.size() > 0 && on_GoTO_MODE ){
-            float cur_dist_onPath = front - ori_front;
-            bool hasFoundOnPath = false;
-            for ( auto& state : distPathstate_vec ){
-                if ( std::abs( state.dist_valid_onPath - cur_dist_onPath ) > 0.01f ){
-                    continue;
-                }
-                // std::cout << "Current path progress: " << cur_dist_onPath << " with original devPath:" << state.dist_valid_devPath << ", left: " << left << ", right: " << right << std::endl;
-                // std::cout <<" Distance to be modified, right: " << right << ", left: " << left << ", path progress: " << std::abs( state.dist_valid_onPath - cur_dist_onPath ) << std::endl; 
+                float cur_dist_onPath = cur_front - ori_front;
+                float toLeft{4.0f};
+                float toRight{4.0f};
+                for ( auto& state : distPathstate_vec ){
+                    // std::cout <<" Current front diff, front: " << front << ", original front: "<< ori_front << std::endl; 
+                    // std::cout <<" Distance to check, state on path:" << state.dist_valid_onPath << std::endl; 
+                    
+                    // While some path in Crazyflie range
+                    if ( std::abs( state.dist_valid_onPath - cur_dist_onPath ) > 0.1f ){
+                        continue;
+                    }
 
-                hasFoundOnPath = true;
-                if ( state.dist_valid_devPath <= 0.0f ){
-                    state.dist_valid_devPath = -right;
-                }
-                else{
-                    state.dist_valid_devPath = left; 
-                }
-            }
-
-            if ( hasFoundOnPath == false ){
-                distPathState pstate = { cur_dist_onPath, -right }; 
-                distPathstate_vec.insert( distPathstate_vec.begin(), pstate ); 
-                pstate = { cur_dist_onPath, left }; 
-                distPathstate_vec.insert( distPathstate_vec.begin(), pstate ); 
-            }
-
-            // Refresh rear
-            cur_validWay.toRear = rear;
-            // std::cout <<" Refresh distpath on goto mode with rear: " << cur_validWay.toRear << std::endl;
-        }
-
-        // Start valid way checking
-        if ( distPathstate_vec.size() > 0 ){
-            cur_validWay.toLeft = -1.0f;
-            cur_validWay.toRight = -1.0f;
-
-            float cur_dist_onPath = front - ori_front;
-            float toLeft{4.0f};
-            float toRight{4.0f};
-            for ( auto& state : distPathstate_vec ){
-                // std::cout <<" Current front diff, front: " << front << ", original front: "<< ori_front << std::endl; 
-                // std::cout <<" Distance to check, state on path:" << state.dist_valid_onPath << std::endl; 
-                
-                // While some path in Crazyflie range
-                if ( std::abs( state.dist_valid_onPath - cur_dist_onPath ) > 0.1f ){
-                    continue;
-                }
-
-                if ( state.dist_valid_devPath > 0.0f ){
-                    if ( std::abs( state.dist_valid_devPath ) < toLeft ){
-                        toLeft = std::abs( state.dist_valid_devPath );
+                    if ( state.dist_valid_devPath > 0.0f ){
+                        if ( std::abs( state.dist_valid_devPath ) < toLeft ){
+                            toLeft = std::abs( state.dist_valid_devPath );
+                        }
+                    }
+                    else{
+                        if ( std::abs( state.dist_valid_devPath ) < toRight ){
+                            toRight = std::abs( state.dist_valid_devPath );
+                        }
                     }
                 }
-                else{
-                    if ( std::abs( state.dist_valid_devPath ) < toRight ){
-                        toRight = std::abs( state.dist_valid_devPath );
-                    }
+
+                // Set current valid way to the state
+                if ( toLeft != 4.0f ){
+                    cur_validWay.toLeft = toLeft;
                 }
+                else{
+                    cur_validWay.toLeft = cur_left;
+                }
+                if ( toRight != 4.0f ){
+                    cur_validWay.toRight = toRight;
+                }
+                else{
+                    cur_validWay.toRight = cur_right;
+                }
+                // std::cout <<" Valid way checking start... with left " << cur_validWay.toLeft << ", with right: " << cur_validWay.toRight << ", with rear: " << cur_validWay.toRear << ", and current angle: " << cur_yaw << std::endl;
             }
 
-            // Set current valid way to the state
-            if ( toLeft != 4.0f ){
-                cur_validWay.toLeft = toLeft;
+            // Set the variables back
+            {
+                std::lock_guard<std::mutex> lock(validRangeMutex);
+                cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
+                cur_validRangeStruct.cur_validWay = cur_validWay;
+                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
+                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
             }
-            else{
-                cur_validWay.toLeft = left;
+            {
+                std::lock_guard<std::mutex> lock(lookAroundMutex);
+                cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
+                cur_lookAroundStruct.cur_lookAroundState = cur_lookAroundState;
+                cur_validRangeStruct.ori_front = ori_front;
             }
-            if ( toRight != 4.0f ){
-                cur_validWay.toRight = toRight;
-            }
-            else{
-                cur_validWay.toRight = right;
-            }
-            // std::cout <<" Valid way checking start... with left " << cur_validWay.toLeft << ", with right: " << cur_validWay.toRight << ", with rear: " << cur_validWay.toRear << ", and current angle: " << cur_state.yaw << std::endl;
-        }
+        }              
     });
 
     std::thread t_dynamic(dynamicObstacleAvoidance);
