@@ -124,7 +124,7 @@ int32_t main(int32_t argc, char **argv) {
     std::atomic<bool> frontReachingActive(false);
     std::atomic<bool> targetFindingActive(false);
     std::atomic<bool> lookingAroundActive(false);
-    
+
     // Handler to receive distance readings (realized as C++ lambda).
     std::mutex distancesMutex;
     float front{0};
@@ -219,106 +219,131 @@ int32_t main(int32_t argc, char **argv) {
     // float takeoff_batterythreshold = 3.6f;
 
     // Varibles to record current valid ranges
-    struct distPathState {
-        float dist_valid_onPath;
-        float dist_valid_devPath;
-    };
-    std::vector<distPathState> distPathstate_vec;
-    struct ValidWay { 
-        float toLeft;
-        float toRight;
-        float toRear;
-    };
-    ValidWay cur_validWay = {-1.0f, -1.0f, -1.0f};
-    bool on_GoTO_MODE = false;
-    bool on_TURNING_MODE = false;
-
+    std::mutex validRangeMutex;
+    struct validRangeStruct{
+        struct distPathState {
+            float dist_valid_onPath;
+            float dist_valid_devPath;
+        };
+        std::vector<distPathState> distPathstate_vec;
+        struct ValidWay { 
+            float toLeft;
+            float toRight;
+            float toRear;
+        };
+        ValidWay cur_validWay = {-1.0f, -1.0f, -1.0f};
+        bool on_GoTO_MODE = false;
+        bool on_TURNING_MODE = false;
+    }
+    validRangeStruct cur_validRangeStruct;
+    
     // Variables for static obstacles avoidance
-    float safe_endreach_dist = 0.27;
-    float safe_endreach_LR_dist = 0.1;
-    float cur_distToMove{0.0f};
-    int time_toMove = 1;
-    struct preDist {
-        float left;
-        float right;
-    };
-    preDist cur_preDist = {-1.0f, -1.0f};
-    struct ReachEndState {
-        bool reachFront;
-        bool reachLeft;
-        bool reachRight;
-        bool reachRear;
-    };
-    ReachEndState cur_reachEndState = { false, false, false, false };
+    std::mutex staticObsMutex;
+    struct staticObsStruct{
+        float safe_endreach_dist = 0.27;
+        float safe_endreach_LR_dist = 0.1;
+        float cur_distToMove{0.0f};
+        int time_toMove = 1;
+        struct preDist {
+            float left;
+            float right;
+        };
+        preDist cur_preDist = {-1.0f, -1.0f};
+        struct ReachEndState {
+            bool reachFront;
+            bool reachLeft;
+            bool reachRight;
+            bool reachRear;
+        };
+        ReachEndState cur_reachEndState = { false, false, false, false };
+    }
+    staticObsStruct cur_staticObsStruct;
 
     // Variables for dynamic obstacles avoidance
-    float dodgeDist{0.0f};
-    float dodgeDist_UP{0.0f};
-    bool has_dodgeToRear = false;
-    enum DodgeType {
-        DODGE_STOP,
-        DODGE_LEFT,
-        DODGE_RIGHT,
-        DODGE_REAR,
-        DODGE_UP,
-        DODGE_NONE
-    };
-    DodgeType cur_dodgeType = DODGE_NONE;
-    struct obsState {
-        float dist_obs;
-        float aimDirection_obs;
-    };
-    obsState cur_obsState = { -1.0f, -1.0f };
-    bool has_possibleInterrupt = false;
-    bool has_InterruptNeedToReDo = false;
+    std::mutex dynamicObsMutex;
+    struct dynamicObsStruct{
+        float dodgeDist{0.0f};
+        float dodgeDist_UP{0.0f};
+        bool has_dodgeToRear = false;
+        enum DodgeType {
+            DODGE_STOP,
+            DODGE_LEFT,
+            DODGE_RIGHT,
+            DODGE_REAR,
+            DODGE_UP,
+            DODGE_NONE
+        };
+        DodgeType cur_dodgeType = DODGE_NONE;
+        struct obsState {
+            float dist_obs;
+            float aimDirection_obs;
+        };
+        obsState cur_obsState = { -1.0f, -1.0f };
+        bool has_possibleInterrupt = false;
+        bool has_InterruptNeedToReDo = false;
+    }
+    dynamicObsStruct = cur_dynamicObsStruct;
 
     // Variables for front reaching
-    struct pathReachingState {
-        bool pathReadyToGo;
-        bool pathOnGoing;
-        float startFront;
-    };
-    pathReachingState cur_pathReachingState = {false, false, -1.0f};
+    std::mutex frontReachingMutex;
+    struct frontReachingStruct{
+        struct pathReachingState {
+            bool pathReadyToGo;
+            bool pathOnGoing;
+            float startFront;
+        };
+        pathReachingState cur_pathReachingState = {false, false, -1.0f};
+    }
+    frontReachingStruct = cur_frontReachingStruct;
 
     // Variables for target finding
-    struct targetCheckState {
-        bool aimTurnStarted;
-        bool pointToTarget;
-        bool turnStarted;
-        float startAngle;
-        float cur_aimDiff;
-        float ang_toTurn;
-        float targetAngle;
-    };
-    targetCheckState cur_targetCheckState = {false, false, false, -1.0f, 100.0f / 180.0f * M_PI, -1.0f, -1.0f};
-    float start_turning_angle{0.0f};
+    std::mutex targetFindingMutex;
+    struct targetFindingStruct{
+        struct targetCheckState {
+            bool aimTurnStarted;
+            bool pointToTarget;
+            bool turnStarted;
+            float startAngle;
+            float cur_aimDiff;
+            float ang_toTurn;
+            float targetAngle;
+        };
+        targetCheckState cur_targetCheckState = {false, false, false, -1.0f, 100.0f / 180.0f * M_PI, -1.0f, -1.0f};
+        float start_turning_angle{0.0f};
+    }
+    targetFindingStruct = cur_targetFindingStruct;
 
     // Variables for homing
     // float homing_batterythreshold = 3.35f;
     // float homing_batterythreshold = 2.5f;
 
     // Variables for looking around
-    struct angleFrontState {
-        float angle;
-        float front;
-    };    
-    std::vector<angleFrontState> angleFrontState_vec;
-    struct lookAroundState {
-        bool clearPathCheckStarted;
-        bool turnStarted;
-        bool smallToBig;
-        float preAngle;
-        float startAngle;
-        float targetAngle;
-        int nTimer;
-    };
-    lookAroundState cur_lookAroundState = {false, false, false, -1.0f, -10.0f, -1.0f, 0};
-    float ori_front{0.0f};
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<int> distribution (0, 1);
+    std::mutex lookAroundMutex;
+    struct lookAroundStruct{
+        struct angleFrontState {
+            float angle;
+            float front;
+        };    
+        std::vector<angleFrontState> angleFrontState_vec;
+        struct lookAroundState {
+            bool clearPathCheckStarted;
+            bool turnStarted;
+            bool smallToBig;
+            float preAngle;
+            float startAngle;
+            float targetAngle;
+            int nTimer;
+        };
+        lookAroundState cur_lookAroundState = {false, false, false, -1.0f, -10.0f, -1.0f, 0};
+        float ori_front{0.0f};
+        // std::random_device rd;
+        // std::mt19937 gen(rd());
+        // std::uniform_int_distribution<int> distribution (0, 1);
+    }
+    lookAroundStruct = cur_lookAroundStruct;
 
     // Timer to record time of each behaviour
+    std::mutex timeMutex;
     auto taskStartTime = std::chrono::high_resolution_clock::now();
     auto taskEndTime = std::chrono::high_resolution_clock::now();
     auto obsStaticStartTime = std::chrono::high_resolution_clock::now();
@@ -333,23 +358,162 @@ int32_t main(int32_t argc, char **argv) {
     auto lookAroundEndTime = std::chrono::high_resolution_clock::now();
 
 
-    // 初始動作：起飛
-    if ( hasTakeoff == false ){
-        if ( cur_state.battery_state > takeoff_batterythreshold ){
-            Takeoff(od4, 1.0f, 3);
-            hasTakeoff = true;
-            taskStartTime = std::chrono::high_resolution_clock::now();
-        }
-        else{
-            std::cout <<" Battery is too low for taking off..." << std::endl;
-            continue;
-        }
+    // Take off first
+    if ( cur_state.battery_state > takeoff_batterythreshold ){
+        Takeoff(od4, 1.0f, 3);
+        taskStartTime = std::chrono::high_resolution_clock::now();
     }
-    Takeoff(1.0f, 3);
+    else{
+        std::cout <<" Battery is too low for taking off..." << std::endl;
+        return retCode;
+    }
 
     // 建立各行為的執行緒
-    std::thread ValidDirectionCheckTask([&value]() {
-        std::cout << "執行緒中的值: " << value << std::endl;
+    std::thread ValidDirectionCheckTask([&validRangeMutex, &cur_validRangeStruct,
+                                         &lookAroundMutex, &cur_lookAroundStruct]() {
+        // Variables for valid range check
+        std::vector<distPathState> distPathstate_vec;
+        ValidWay cur_validWay = {-1.0f, -1.0f, -1.0f};
+        bool on_GoTO_MODE = false;
+        bool on_TURNING_MODE = false;
+
+        // Variables for look around
+        std::vector<angleFrontState> angleFrontState_vec;
+        lookAroundState cur_lookAroundState = {false, false, false, -1.0f, -10.0f, -1.0f, 0};
+        float ori_front{0.0f};
+
+        {
+            std::lock_guard<std::mutex> lock(validRangeMutex);
+            distPathstate_vec = cur_validRangeStruct.distPathstate_vec;
+            cur_validWay = cur_validRangeStruct.cur_validWay;
+            on_GoTO_MODE = cur_validRangeStruct.on_GoTO_MODE;
+            on_TURNING_MODE = cur_validRangeStruct.on_TURNING_MODE;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(lookAroundMutex);
+            angleFrontState_vec = cur_lookAroundStruct.angleFrontState_vec;
+            cur_lookAroundState = cur_lookAroundStruct.cur_lookAroundState;
+            ori_front = cur_validRangeStruct.ori_front;
+        }
+
+        if ( angleFrontState_vec.size() > 2000 )
+            angleFrontState_vec.resize(2000);
+        if ( distPathstate_vec.size() > 2000 )
+            distPathstate_vec.resize(2000);
+
+        if ( on_TURNING_MODE && angleFrontState_vec.size() > 0 ){
+            // Try to refresh the rear distance
+            float rearDist{-1.0f};
+            float angMin = std::abs( std::atan2( 0.1f, front ) );
+            for ( const auto& pair : angleFrontState_vec ){
+                // std::cout <<" Current angle to check, angle: " << pair.angle << ", front: " << pair.front << std::endl; 
+                float angDev = std::abs( angleDifference( pair.angle, cur_state.yaw ) );
+                if ( angDev >= 135.0f / 180.0f * M_PI ){
+                    if ( pair.front * std::sin( angDev ) > 0.1f ){
+                        continue;
+                    }
+                }  
+                else if ( angDev < 135.0f / 180.0f * M_PI ){
+                    continue;
+                }
+
+                if ( std::abs( pair.front * std::cos( angDev ) ) < rearDist || rearDist == -1.0f ){
+                    rearDist = std::abs( pair.front * std::cos( angDev ) );
+                }                   
+            }
+            cur_validWay.toRear = rearDist;
+
+            // Record path related information
+            ori_front = front;
+            if ( distPathstate_vec.size() > 0 ){
+                distPathstate_vec.clear();
+            }
+            for ( const auto& pair : angleFrontState_vec ){
+                float angDev = angleDifference( cur_state.yaw, pair.angle );
+                // std::cout <<" Current angle difference: " << angDev << ", front: " <<pair.front << ", current angle: " << cur_state.yaw << std::endl; 
+                // std::cout <<" Cosine(On Path): " << pair.front*std::cos( angDev ) << ", Sine(Dev Path): " << pair.front*std::sin( angDev ) << std::endl; 
+                distPathState pstate = { pair.front*std::cos( angDev ), pair.front*std::sin( angDev ) }; 
+                distPathstate_vec.insert( distPathstate_vec.begin(), pstate );              
+            }
+        }
+
+        // Refresh valid left/right/rear on the way
+        if ( distPathstate_vec.size() > 0 && on_GoTO_MODE ){
+            float cur_dist_onPath = front - ori_front;
+            bool hasFoundOnPath = false;
+            for ( auto& state : distPathstate_vec ){
+                if ( std::abs( state.dist_valid_onPath - cur_dist_onPath ) > 0.01f ){
+                    continue;
+                }
+                // std::cout << "Current path progress: " << cur_dist_onPath << " with original devPath:" << state.dist_valid_devPath << ", left: " << left << ", right: " << right << std::endl;
+                // std::cout <<" Distance to be modified, right: " << right << ", left: " << left << ", path progress: " << std::abs( state.dist_valid_onPath - cur_dist_onPath ) << std::endl; 
+
+                hasFoundOnPath = true;
+                if ( state.dist_valid_devPath <= 0.0f ){
+                    state.dist_valid_devPath = -right;
+                }
+                else{
+                    state.dist_valid_devPath = left; 
+                }
+            }
+
+            if ( hasFoundOnPath == false ){
+                distPathState pstate = { cur_dist_onPath, -right }; 
+                distPathstate_vec.insert( distPathstate_vec.begin(), pstate ); 
+                pstate = { cur_dist_onPath, left }; 
+                distPathstate_vec.insert( distPathstate_vec.begin(), pstate ); 
+            }
+
+            // Refresh rear
+            cur_validWay.toRear = rear;
+            // std::cout <<" Refresh distpath on goto mode with rear: " << cur_validWay.toRear << std::endl;
+        }
+
+        // Start valid way checking
+        if ( distPathstate_vec.size() > 0 ){
+            cur_validWay.toLeft = -1.0f;
+            cur_validWay.toRight = -1.0f;
+
+            float cur_dist_onPath = front - ori_front;
+            float toLeft{4.0f};
+            float toRight{4.0f};
+            for ( auto& state : distPathstate_vec ){
+                // std::cout <<" Current front diff, front: " << front << ", original front: "<< ori_front << std::endl; 
+                // std::cout <<" Distance to check, state on path:" << state.dist_valid_onPath << std::endl; 
+                
+                // While some path in Crazyflie range
+                if ( std::abs( state.dist_valid_onPath - cur_dist_onPath ) > 0.1f ){
+                    continue;
+                }
+
+                if ( state.dist_valid_devPath > 0.0f ){
+                    if ( std::abs( state.dist_valid_devPath ) < toLeft ){
+                        toLeft = std::abs( state.dist_valid_devPath );
+                    }
+                }
+                else{
+                    if ( std::abs( state.dist_valid_devPath ) < toRight ){
+                        toRight = std::abs( state.dist_valid_devPath );
+                    }
+                }
+            }
+
+            // Set current valid way to the state
+            if ( toLeft != 4.0f ){
+                cur_validWay.toLeft = toLeft;
+            }
+            else{
+                cur_validWay.toLeft = left;
+            }
+            if ( toRight != 4.0f ){
+                cur_validWay.toRight = toRight;
+            }
+            else{
+                cur_validWay.toRight = right;
+            }
+            // std::cout <<" Valid way checking start... with left " << cur_validWay.toLeft << ", with right: " << cur_validWay.toRight << ", with rear: " << cur_validWay.toRear << ", and current angle: " << cur_state.yaw << std::endl;
+        }
     });
 
     std::thread t_dynamic(dynamicObstacleAvoidance);
