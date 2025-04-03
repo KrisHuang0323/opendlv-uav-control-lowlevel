@@ -1058,14 +1058,17 @@
                      Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false);
                      std::this_thread::sleep_for(std::chrono::milliseconds(500));
          
-                     // Sort the angle array first           
-                     std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [cur_targetCheckState](const angleFrontState& a, const angleFrontState& b) {
-                         if(a.angle != b.angle){
-                             float angledev_a = std::abs( angleDifference( a.angle,cur_targetCheckState.targetAngle ) );
-                             float angledev_b = std::abs( angleDifference( b.angle, cur_targetCheckState.targetAngle ) );
-                             return angledev_a < angledev_b;
-                         }
-                     });
+                    // Sort the angle array first           
+                    std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(),
+                        [cur_targetCheckState](const angleFrontState& a, const angleFrontState& b) -> bool {
+                            float angledev_a = std::abs(angleDifference(a.angle, cur_targetCheckState.targetAngle));
+                            float angledev_b = std::abs(angleDifference(b.angle, cur_targetCheckState.targetAngle));
+                            if (angledev_a == angledev_b) {
+                                return a.angle < b.angle;
+                            }
+                            return angledev_a < angledev_b;
+                        }
+                    );
      
                      // Check for clear path
                      bool hasObOnPath = false; 
@@ -1456,21 +1459,23 @@
                      cur_lookAroundState.nTimer = 0;
                  }
  
-                 // Sort the angle array first 
-                 if ( cur_lookAroundState.smallToBig == false ){
-                     std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                         if( a.front != b.front )
-                             return a.front > b.front;
-                     });
-                     cur_lookAroundState.smallToBig = true;
-                 }
-                 else{
-                     std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                         if( a.front != b.front )
-                             return a.front < b.front;
-                     });
-                     cur_lookAroundState.smallToBig = false;
-                 }
+                // Sort the angle array first 
+                if ( cur_lookAroundState.smallToBig == false ){
+                    std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                        if( a.front != b.front )
+                            return a.front > b.front;
+                        return a.angle < b.angle;
+                    });
+                    cur_lookAroundState.smallToBig = true;
+                }
+                else{
+                    std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                        if( a.front != b.front )
+                            return a.front < b.front;
+                        return a.angle < b.angle;
+                    });
+                    cur_lookAroundState.smallToBig = false;
+                }
  
                  // Check for clear path
                  std::cout <<" Start path checking with angle vector size: " << angleFrontState_vec.size() << std::endl;
@@ -1581,20 +1586,22 @@
  
                      // Start to find another way to go to
                      // Sort the angle array first 
-                     if ( cur_lookAroundState.smallToBig == false ){
-                         std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                             if( a.front != b.front )
-                                 return a.front > b.front;
-                         });
-                         cur_lookAroundState.smallToBig = true;
-                     }
-                     else{
-                         std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                             if( a.front != b.front )
-                                 return a.front < b.front;
-                         });
-                         cur_lookAroundState.smallToBig = false;
-                     }
+                    if ( cur_lookAroundState.smallToBig == false ){
+                        std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                            if( a.front != b.front )
+                                return a.front > b.front;
+                            return a.angle < b.angle;
+                        });
+                        cur_lookAroundState.smallToBig = true;
+                    }
+                    else{
+                        std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                            if( a.front != b.front )
+                                return a.front < b.front;
+                            return a.angle < b.angle;
+                        });
+                        cur_lookAroundState.smallToBig = false;
+                    }
  
                      // Check for clear path
                      std::cout <<" Start path checking..." << std::endl;
