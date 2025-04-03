@@ -31,18 +31,21 @@
  #include <random>
  #include <chrono>
  
- 
- void Takeoff(cluon::OD4Session &od4, float height, int duration){
+ std::mutex od4Mutex; // Mutex to protect shared access to od4
+ void Takeoff(std::shared_ptr<cluon::OD4Session> od4, float height, int duration){
      std::cout << "Taking off to height: " << height << std::endl;        
      cluon::data::TimeStamp sampleTime;
      opendlv::logic::action::CrazyFlieCommand cfcommand;
      cfcommand.height(height);
      cfcommand.time(duration);
-     od4.send(cfcommand, sampleTime, 0);
+     {
+        std::lock_guard<std::mutex> lck(od4Mutex);
+        od4->send(cfcommand, sampleTime, 0);
+     }
      std::this_thread::sleep_for(std::chrono::milliseconds(duration*1000 + 500));
  }
  
- void Goto(cluon::OD4Session &od4, float x, float y, float z, float yaw, int duration, int relative = 1, bool isdelay = false, bool verbose = true){
+ void Goto(std::shared_ptr<cluon::OD4Session> od4, float x, float y, float z, float yaw, int duration, int relative = 1, bool isdelay = false, bool verbose = true){
      if ( verbose ){
          std::cout << "Go to position : x: "<< x << " ,y: " << y << " ,z: " << z << " , yaw: " << yaw << std::endl;
      }
@@ -54,27 +57,36 @@
      cfcommand.yaw(yaw);
      cfcommand.time(duration);
      // cfcommand.relative(relative);
-     od4.send(cfcommand, sampleTime, 3);
+     {
+        std::lock_guard<std::mutex> lck(od4Mutex);
+        od4->send(cfcommand, sampleTime, 3);
+     }
      if ( isdelay ){
          std::this_thread::sleep_for(std::chrono::milliseconds(duration*1000 + 500));
      }
  }
  
- void Landing(cluon::OD4Session &od4, float height, int duration){
+ void Landing(std::shared_ptr<cluon::OD4Session> od4, float height, int duration){
      std::cout << "Landing to height: " << height << std::endl;
      cluon::data::TimeStamp sampleTime;
      opendlv::logic::action::CrazyFlieCommand cfcommand;
      cfcommand.height(height);
      cfcommand.time(duration);
-     od4.send(cfcommand, sampleTime, 1);
+     {
+        std::lock_guard<std::mutex> lck(od4Mutex);
+        od4->send(cfcommand, sampleTime, 1);
+     }
      std::this_thread::sleep_for(std::chrono::milliseconds(duration*1000 + 500));
  }
  
- void Stopping(cluon::OD4Session &od4){
+ void Stopping(std::shared_ptr<cluon::OD4Session> od4){
      std::cout << "Stopping." << std::endl;
      cluon::data::TimeStamp sampleTime;
      opendlv::logic::action::CrazyFlieCommand cfcommand;
-     od4.send(cfcommand, sampleTime, 2);
+     {
+        std::lock_guard<std::mutex> lck(od4Mutex);
+        od4->send(cfcommand, sampleTime, 2);
+     }
      std::this_thread::sleep_for(std::chrono::milliseconds(3000));
  }
  
@@ -113,20 +125,21 @@
      const float takeoff_batterythreshold = (commandlineArguments.count("tbat") != 0) ? std::stof(commandlineArguments["tbat"]) : 3.6;
  
      // Interface to a running OpenDaVINCI session; here, you can send and receive messages.
-     cluon::OD4Session od4{static_cast<uint16_t>(std::stoi(commandlineArguments["cid"]))};
+     std::shared_ptr<cluon::OD4Session> od4 = std::make_shared<cluon::OD4Session>(static_cast<uint16_t>(std::stoi(commandlineArguments["cid"])));
+    //  cluon::OD4Session od4{static_cast<uint16_t>(std::stoi(commandlineArguments["cid"]))};
  
      // Handler to receive distance readings (realized as C++ lambda).
      std::mutex distancesMutex;
-     float front{0};
-     float rear{0};
-     float left{0};
-     float right{0};
+     std::atomic<float> front{0};
+     std::atomic<float> rear{0};
+     std::atomic<float> left{0};
+     std::atomic<float> right{0};
      auto onDistance = [&distancesMutex, &front, &rear, &left, &right](cluon::data::Envelope &&env){
          auto senderStamp = env.senderStamp();
          // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
          opendlv::proxy::DistanceReading dr = cluon::extractMessage<opendlv::proxy::DistanceReading>(std::move(env));
          // Store distance readings.
-         std::lock_guard<std::mutex> lck(distancesMutex);
+        //  std::lock_guard<std::mutex> lck(distancesMutex);
          switch (senderStamp) {
              case 0: front = dr.distance(); break;
              case 1: rear = dr.distance(); break;
@@ -135,30 +148,32 @@
          }
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
-     od4.dataTrigger(opendlv::proxy::DistanceReading::ID(), onDistance);
+     od4->dataTrigger(opendlv::proxy::DistanceReading::ID(), onDistance);
  
      // Handler to receive state readings (realized as C++ lambda).
-     struct State {
-         float yaw;
-         float battery_state;
-     };
+    //  struct State {
+    //     std::atomic<float> yaw{0.0f};
+    //     std::atomic<float> battery_state{0.0f};
+    //  };
      std::mutex stateMutex;
-     State cur_state{0.0f, 0.0f};
-     auto onStateRead = [&stateMutex, &cur_state](cluon::data::Envelope &&env){
+     std::atomic<float> cur_state_yaw{0.0f};
+     std::atomic<float> cur_state_battery_state{0.0f};
+     auto onStateRead = [&cur_state_yaw, &cur_state_battery_state](cluon::data::Envelope &&env){
          auto senderStamp = env.senderStamp();
          // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
          opendlv::logic::sensation::CrazyFlieState cfState = cluon::extractMessage<opendlv::logic::sensation::CrazyFlieState>(std::move(env));
          // Store distance readings.
-         std::lock_guard<std::mutex> lck(stateMutex);
-         cur_state.yaw = cfState.cur_yaw();
-         cur_state.battery_state = cfState.battery_state();
+        //  std::lock_guard<std::mutex> lck(stateMutex);
+        cur_state_yaw = cfState.cur_yaw();
+        cur_state_battery_state = cfState.battery_state();
+        //  std::cout <<" Current angle: " <<  cur_state_r.yaw << std::endl; 
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
-     od4.dataTrigger(opendlv::logic::sensation::CrazyFlieState::ID(), onStateRead);
+     od4->dataTrigger(opendlv::logic::sensation::CrazyFlieState::ID(), onStateRead);
  
-     float dist_target{-1.0f};
-     float dist_obs{-1.0f};
-     float dist_chpad{-1.0f};
+     std::atomic<float> dist_target{-1.0f};
+     std::atomic<float> dist_obs{-1.0f};
+     std::atomic<float> dist_chpad{-1.0f};
      std::mutex distMutex;
      auto onDistRead = [&distMutex, &dist_target, &dist_obs, &dist_chpad](cluon::data::Envelope &&env){
          auto senderStamp = env.senderStamp();
@@ -166,7 +181,7 @@
          opendlv::logic::action::PreviewPoint pPtmessage = cluon::extractMessage<opendlv::logic::action::PreviewPoint>(std::move(env));
          
          // Store distance readings.
-         std::lock_guard<std::mutex> lck(distMutex);
+        //  std::lock_guard<std::mutex> lck(distMutex);
          if ( senderStamp == 0 ){
              dist_target = pPtmessage.distance();
          }
@@ -178,11 +193,11 @@
          }
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
-     od4.dataTrigger(opendlv::logic::action::PreviewPoint::ID(), onDistRead);
+     od4->dataTrigger(opendlv::logic::action::PreviewPoint::ID(), onDistRead);
  
-     float aimDirection_target{-4.0f};
-     float aimDirection_obs{-4.0f};
-     float aimDirection_chpad{-4.0f};
+     std::atomic<float> aimDirection_target{-4.0f};
+     std::atomic<float> aimDirection_obs{-4.0f};
+     std::atomic<float> aimDirection_chpad{-4.0f};
      std::mutex aimDirectionMutex;
      auto onAimDirectionRead = [&aimDirectionMutex, &aimDirection_target, &aimDirection_obs, &aimDirection_chpad](cluon::data::Envelope &&env){
          auto senderStamp = env.senderStamp();
@@ -190,7 +205,7 @@
          opendlv::logic::action::AimDirection aDirmessage = cluon::extractMessage<opendlv::logic::action::AimDirection>(std::move(env));
          
          // Store aim direction readings.
-         std::lock_guard<std::mutex> lck(aimDirectionMutex);
+        //  std::lock_guard<std::mutex> lck(aimDirectionMutex);
          if ( senderStamp == 0 ){
              aimDirection_target = aDirmessage.azimuthAngle();
          }
@@ -202,7 +217,22 @@
          }
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
-     od4.dataTrigger(opendlv::logic::action::AimDirection::ID(), onAimDirectionRead);
+     od4->dataTrigger(opendlv::logic::action::AimDirection::ID(), onAimDirectionRead);
+
+     std::atomic<int16_t> nTargetTimer{0};
+     auto onTargetTimerRead = [&nTargetTimer](cluon::data::Envelope &&env){
+         auto senderStamp = env.senderStamp();
+         // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
+         opendlv::logic::sensation::TargetFoundState tStatemessage = cluon::extractMessage<opendlv::logic::sensation::TargetFoundState>(std::move(env));
+         
+         // Store aim direction readings.
+        //  std::lock_guard<std::mutex> lck(aimDirectionMutex);
+         if ( senderStamp == 0 ){
+            nTargetTimer = tStatemessage.target_found_count();
+         }
+     };
+     // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
+     od4->dataTrigger(opendlv::logic::sensation::TargetFoundState::ID(), onTargetTimerRead);
  
      // Takeoff flags
      bool hasTakeoff = false;
@@ -321,8 +351,10 @@
      auto frontReachingEndTime = std::chrono::high_resolution_clock::now();
      auto lookAroundStartTime = std::chrono::high_resolution_clock::now();
      auto lookAroundEndTime = std::chrono::high_resolution_clock::now();
+
+    //  State cur_state{0.0f, 0.0f};
  
-     while (od4.isRunning()) {
+     while (od4->isRunning()) {
          // Sleep for 10 ms to not let the loop run to fast
          std::this_thread::sleep_for(std::chrono::milliseconds(10));
  
@@ -332,7 +364,7 @@
              - Check if the battery state is acceptable to take off
          */
          if ( hasTakeoff == false ){
-             if ( cur_state.battery_state > takeoff_batterythreshold ){
+             if ( cur_state_battery_state > takeoff_batterythreshold ){
                  Takeoff(od4, 1.0f, 3);
                  hasTakeoff = true;
                  taskStartTime = std::chrono::high_resolution_clock::now();
@@ -360,7 +392,7 @@
              float angMin = std::abs( std::atan2( 0.1f, front ) );
              for ( const auto& pair : angleFrontState_vec ){
                  // std::cout <<" Current angle to check, angle: " << pair.angle << ", front: " << pair.front << std::endl; 
-                 float angDev = std::abs( angleDifference( pair.angle, cur_state.yaw ) );
+                 float angDev = std::abs( angleDifference( pair.angle, cur_state_yaw ) );
                  if ( angDev >= 135.0f / 180.0f * M_PI ){
                      if ( pair.front * std::sin( angDev ) > 0.1f ){
                          continue;
@@ -382,8 +414,8 @@
                  distPathstate_vec.clear();
              }
              for ( const auto& pair : angleFrontState_vec ){
-                 float angDev = angleDifference( cur_state.yaw, pair.angle );
-                 // std::cout <<" Current angle difference: " << angDev << ", front: " <<pair.front << ", current angle: " << cur_state.yaw << std::endl; 
+                 float angDev = angleDifference( cur_state_yaw, pair.angle );
+                 // std::cout <<" Current angle difference: " << angDev << ", front: " <<pair.front << ", current angle: " << cur_state_yaw << std::endl; 
                  // std::cout <<" Cosine(On Path): " << pair.front*std::cos( angDev ) << ", Sine(Dev Path): " << pair.front*std::sin( angDev ) << std::endl; 
                  distPathState pstate = { pair.front*std::cos( angDev ), pair.front*std::sin( angDev ) }; 
                  distPathstate_vec.insert( distPathstate_vec.begin(), pstate );              
@@ -464,7 +496,7 @@
              else{
                  cur_validWay.toRight = right;
              }
-             // std::cout <<" Valid way checking start... with left " << cur_validWay.toLeft << ", with right: " << cur_validWay.toRight << ", with rear: " << cur_validWay.toRear << ", and current angle: " << cur_state.yaw << std::endl;
+             // std::cout <<" Valid way checking start... with left " << cur_validWay.toLeft << ", with right: " << cur_validWay.toRight << ", with rear: " << cur_validWay.toRear << ", and current angle: " << cur_state_yaw << std::endl;
          }
  
          /*
@@ -518,7 +550,7 @@
                      std::cout <<" Cur toRight: "<< cur_validWay.toRight << std::endl;
                      if ( cur_validWay.toRight >= safe_endreach_LR_dist + 0.2f && dist_obs == -1.0f ){
                          std::cout <<" Left end meets limit with right direction dodge..." << std::endl;
-                         Goto(od4, 0.2f * std::sin( cur_state.yaw ), - 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
+                         Goto(od4, 0.2f * std::sin( cur_state_yaw ), - 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
                          has_possibleInterrupt = true;
                          obsStaticEndTime = std::chrono::high_resolution_clock::now();
                          const std::chrono::duration<double> elapsed = obsStaticEndTime - obsStaticStartTime;
@@ -574,7 +606,7 @@
                      std::cout <<" Cur toLeft: "<< cur_validWay.toLeft << std::endl;
                      if ( cur_validWay.toLeft >= safe_endreach_LR_dist + 0.2f && dist_obs == -1.0f ){
                          std::cout <<" Right end meets limit with left direction dodge..." << std::endl;
-                         Goto(od4, - 0.2f * std::sin( cur_state.yaw ), 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
+                         Goto(od4, - 0.2f * std::sin( cur_state_yaw ), 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
                          has_possibleInterrupt = true;
                          obsStaticEndTime = std::chrono::high_resolution_clock::now();
                          const std::chrono::duration<double> elapsed = obsStaticEndTime - obsStaticStartTime;
@@ -655,7 +687,7 @@
                      if ( cur_validWay.toLeft >= safe_endreach_LR_dist + 0.2f ){
                          Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0); // Stop first
                          std::cout <<" Try to dodge to the left..." << std::endl;
-                         Goto(od4, - 0.2f * std::sin( cur_state.yaw ), 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
+                         Goto(od4, - 0.2f * std::sin( cur_state_yaw ), 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
                          std::this_thread::sleep_for(std::chrono::milliseconds(1000));
                          dodgeDist += 0.2f;
                          on_GoTO_MODE = false;
@@ -670,7 +702,7 @@
                              time_toMove = 4;
                          else
                              time_toMove = 5;
-                         Goto(od4, - cur_distToMove * std::cos( cur_state.yaw ), - cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
+                         Goto(od4, - cur_distToMove * std::cos( cur_state_yaw ), - cur_distToMove * std::sin( cur_state_yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
                          on_GoTO_MODE = true;
                          cur_dodgeType = DODGE_REAR;
                          has_dodgeToRear = true;
@@ -685,7 +717,7 @@
                      if ( cur_validWay.toRight >= safe_endreach_LR_dist + 0.2f ){
                          Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0); // Stop first
                          std::cout <<" Try to dodge to the right..." << std::endl;
-                         Goto(od4, 0.2f * std::sin( cur_state.yaw ), - 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
+                         Goto(od4, 0.2f * std::sin( cur_state_yaw ), - 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
                          std::this_thread::sleep_for(std::chrono::milliseconds(1000));
                          dodgeDist -= 0.2f;
                          on_GoTO_MODE = false;
@@ -700,7 +732,7 @@
                              time_toMove = 4;
                          else
                              time_toMove = 5;
-                         Goto(od4, - cur_distToMove * std::cos( cur_state.yaw ), - cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
+                         Goto(od4, - cur_distToMove * std::cos( cur_state_yaw ), - cur_distToMove * std::sin( cur_state_yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
                          on_GoTO_MODE = true;
                          cur_dodgeType = DODGE_REAR;
                          has_dodgeToRear = true;
@@ -752,7 +784,7 @@
                      if ( cur_validWay.toLeft >= safe_endreach_LR_dist + 0.2f ){
                          // Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
                          std::cout <<" Try to dodge to the left..." << std::endl;
-                         Goto(od4, - 0.2f * std::sin( cur_state.yaw ), 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
+                         Goto(od4, - 0.2f * std::sin( cur_state_yaw ), 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
                          std::this_thread::sleep_for(std::chrono::milliseconds(1000));
                          dodgeDist += 0.2f;
                          on_GoTO_MODE = false;
@@ -767,7 +799,7 @@
                              time_toMove = 4;
                          else
                              time_toMove = 5;
-                         Goto(od4, - cur_distToMove * std::cos( cur_state.yaw ), - cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
+                         Goto(od4, - cur_distToMove * std::cos( cur_state_yaw ), - cur_distToMove * std::sin( cur_state_yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
                          on_GoTO_MODE = true;
                          cur_dodgeType = DODGE_REAR;
                          has_dodgeToRear = true;
@@ -782,7 +814,7 @@
                      if ( cur_validWay.toRight >= safe_endreach_LR_dist + 0.2f ){
                          // Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
                          std::cout <<" Try to dodge to the right..." << std::endl;
-                         Goto(od4, 0.2f * std::sin( cur_state.yaw ), - 0.2f * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
+                         Goto(od4, 0.2f * std::sin( cur_state_yaw ), - 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
                          std::this_thread::sleep_for(std::chrono::milliseconds(1000));
                          dodgeDist -= 0.2f;
                          on_GoTO_MODE = false;
@@ -797,7 +829,7 @@
                              time_toMove = 4;
                          else
                              time_toMove = 5;
-                         Goto(od4, - cur_distToMove * std::cos( cur_state.yaw ), - cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
+                         Goto(od4, - cur_distToMove * std::cos( cur_state_yaw ), - cur_distToMove * std::sin( cur_state_yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
                          on_GoTO_MODE = true;
                          cur_dodgeType = DODGE_REAR;
                          has_dodgeToRear = true;
@@ -822,7 +854,7 @@
              // }
              if ( dodgeDist != 0.0f ){
                  std::cout <<" No obs, try to fly back..." << std::endl;
-                 Goto(od4, dodgeDist * std::sin( cur_state.yaw ), - dodgeDist * std::cos( cur_state.yaw ), 0.0f, 0.0f, 0, 1, true);
+                 Goto(od4, dodgeDist * std::sin( cur_state_yaw ), - dodgeDist * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);
              }
  
              // Reset flags            
@@ -857,7 +889,7 @@
          */
          float dist_to_reach = dist_target;
          float aimDirection_to_reach = aimDirection_target;
-         if ( cur_state.battery_state <= homing_batterythreshold ){
+         if ( cur_state_battery_state <= homing_batterythreshold || nTargetTimer >= 3 ){
              dist_to_reach = dist_chpad;
              aimDirection_to_reach = aimDirection_chpad;
  
@@ -944,7 +976,7 @@
          }
  
          // Try to point the crazyflie to the target first
-         // std::cout <<" Current angle: " << aimDirection_to_reach << ", current battery state: "<< cur_state.battery_state << std::endl;  
+         // std::cout <<" Current angle: " << aimDirection_to_reach << ", current battery state: "<< cur_state_battery_state << std::endl;  
          if ( cur_targetCheckState.pointToTarget == false && ( ( aimDirection_to_reach != -4.0f && dist_to_reach * std::cos( aimDirection_to_reach ) > 20.0f ) || cur_targetCheckState.aimTurnStarted ) ){
              if ( cur_targetCheckState.aimTurnStarted == false ){
                  targetFindingStartTime = std::chrono::high_resolution_clock::now();
@@ -955,13 +987,13 @@
                  if ( aimDirection_to_reach > 0.0f ){    
                      float angTurn = 90.0f / 180.0f * M_PI;
                      cur_targetCheckState.ang_toTurn = angTurn;
-                     cur_targetCheckState.startAngle = cur_state.yaw;    
+                     cur_targetCheckState.startAngle = cur_state_yaw;    
                      Goto(od4, 0.0f, 0.0f, 0.0f, angTurn + 10.0f / 180.0f * M_PI, 2); 
                  }
                  else{
                      float angTurn = -90.0f / 180.0f * M_PI;
                      cur_targetCheckState.ang_toTurn = angTurn;
-                     cur_targetCheckState.startAngle = cur_state.yaw;    
+                     cur_targetCheckState.startAngle = cur_state_yaw;    
                      Goto(od4, 0.0f, 0.0f, 0.0f, angTurn - 10.0f / 180.0f * M_PI, 2);
                  }
                  std::cout <<" Angle to turn: " << cur_targetCheckState.ang_toTurn << std::endl;   
@@ -970,21 +1002,21 @@
                  continue;
              }
              else if ( cur_targetCheckState.turnStarted == false ){
-                 if ( std::abs( angleDifference( cur_targetCheckState.startAngle, cur_state.yaw ) ) < std::abs(cur_targetCheckState.ang_toTurn) ){
+                 if ( std::abs( angleDifference( cur_targetCheckState.startAngle, cur_state_yaw ) ) < std::abs(cur_targetCheckState.ang_toTurn) ){
                      // Do the returning if something interrupt
                      if ( has_possibleInterrupt ){
                          std::cout <<" Some targets occur, so try to turn to look around the target again..." << std::endl;
-                         float angDev = std::abs( angleDifference( cur_targetCheckState.startAngle, cur_state.yaw ) );
+                         float angDev = std::abs( angleDifference( cur_targetCheckState.startAngle, cur_state_yaw ) );
                          if ( cur_targetCheckState.ang_toTurn > 0.0f ){
                              float angTurn = 90.0f / 180.0f * M_PI - angDev;
                              cur_targetCheckState.ang_toTurn = angTurn;
-                             cur_targetCheckState.startAngle = cur_state.yaw;    
+                             cur_targetCheckState.startAngle = cur_state_yaw;    
                              Goto(od4, 0.0f, 0.0f, 0.0f, angTurn + 10.0f / 180.0f * M_PI, 2);                             
                          }
                          else{
                              float angTurn = - ( 90.0f / 180.0f * M_PI - angDev );
                              cur_targetCheckState.ang_toTurn = angTurn;
-                             cur_targetCheckState.startAngle = cur_state.yaw;    
+                             cur_targetCheckState.startAngle = cur_state_yaw;    
                              Goto(od4, 0.0f, 0.0f, 0.0f, angTurn - 10.0f / 180.0f * M_PI, 2);          
                          } 
                          on_TURNING_MODE = true;
@@ -995,27 +1027,27 @@
                      // Record the angle and front                    
                      angleFrontState state;
                      state.front = front;
-                     state.angle = wrap_angle(cur_state.yaw);
+                     state.angle = wrap_angle(cur_state_yaw);
                      angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
                      
                      state.front = rear;
-                     state.angle = wrap_angle(cur_state.yaw + M_PI);
+                     state.angle = wrap_angle(cur_state_yaw + M_PI);
                      angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
      
                      state.front = left;
-                     state.angle = wrap_angle(cur_state.yaw + M_PI / 2.0f);
+                     state.angle = wrap_angle(cur_state_yaw + M_PI / 2.0f);
                      angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
      
                      state.front = right;
-                     state.angle = wrap_angle(cur_state.yaw - M_PI / 2.0f);
+                     state.angle = wrap_angle(cur_state_yaw - M_PI / 2.0f);
                      angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
      
                      // Record target angle
                      // std::cout <<" Current aim direction diff:" << std::abs( aimDirection_to_reach ) << std::endl;   
                      if ( cur_targetCheckState.cur_aimDiff > std::abs( aimDirection_to_reach ) ){
-                         cur_targetCheckState.targetAngle = cur_state.yaw;
+                         cur_targetCheckState.targetAngle = cur_state_yaw;
                          cur_targetCheckState.cur_aimDiff = std::abs( aimDirection_to_reach );
-                         std::cout <<" Current angle: "<< cur_state.yaw << " and aim diff: " << std::abs( aimDirection_to_reach ) << std::endl;   
+                         std::cout <<" Current angle: "<< cur_state_yaw << " and aim diff: " << std::abs( aimDirection_to_reach ) << std::endl;   
                      }
                      continue;
                  }
@@ -1061,32 +1093,38 @@
                          }
      
                          if ( hasObOnPath == false ){
-                             // Found the path, turn to that angle
-                             cur_targetCheckState.targetAngle = pair_cand.angle;
-     
-                             // Try to turn to the angle
-                             std::cout <<" Current angle: " << cur_state.yaw << std::endl;  
-                             std::cout <<" Target angle: " << cur_targetCheckState.targetAngle << std::endl; 
-                             std::cout <<" Angle difference: " << angleDifference( cur_state.yaw, cur_targetCheckState.targetAngle ) << std::endl; 
-                             float angTurn = angleDifference( cur_state.yaw, cur_targetCheckState.targetAngle ) + 5.0f / 180.0f * M_PI;
-                             if ( angleDifference( cur_state.yaw, cur_targetCheckState.targetAngle ) < 0.0f ){
-                                 angTurn -= 10.0f / 180.0f * M_PI;
-                             }
-                             Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 1);
-                             cur_targetCheckState.turnStarted = true;
-                             break;
+                            // Found the path, turn to that angle
+                            cur_targetCheckState.targetAngle = pair_cand.angle;
+    
+                            // Try to turn to the angle
+                            std::cout << "Ready to turn to the target found angle..." << std::endl;
+                            //  std::cout <<" Current angle to turn: " << cur_state_yaw <<", Target angle: " << pair_cand.angle << std::endl; 
+                            //  std::cout <<" Angle difference: " << angleDifference( cur_state_yaw, cur_targetCheckState.targetAngle ) << std::endl; 
+                            float angTurn = angleDifference( cur_state_yaw, pair_cand.angle ) + 5.0f / 180.0f * M_PI;
+                            if ( angleDifference( cur_state_yaw, pair_cand.angle ) < 0.0f ){
+                                angTurn -= 10.0f / 180.0f * M_PI;
+                            }
+                            Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 1);
+                            cur_targetCheckState.turnStarted = true;
+                            break;
                          }
                      }
                      continue;
                  }
              }
              else{
-                 if ( std::abs( angleDifference( cur_targetCheckState.targetAngle, cur_state.yaw ) ) >= 5.0f / 180.0f * M_PI ){
+                 std::atomic<float> yaw{0.0f};
+                 {
+                    std::lock_guard<std::mutex> lck(stateMutex);
+                    yaw.store(cur_state_yaw, std::memory_order_relaxed);
+                 }
+
+                 if ( std::abs( angleDifference( cur_targetCheckState.targetAngle, yaw ) ) >= 5.0f / 180.0f * M_PI ){
                      // Do the returning if something interrupt
                      if ( has_possibleInterrupt ){
                          std::cout <<" Some targets occur, so try to turn to the target again..." << std::endl;
-                         float angTurn = angleDifference( cur_state.yaw, cur_targetCheckState.targetAngle ) + 5.0f / 180.0f * M_PI;
-                         if ( angleDifference( cur_state.yaw, cur_targetCheckState.targetAngle ) < 0.0f ){
+                         float angTurn = angleDifference( yaw, cur_targetCheckState.targetAngle ) + 5.0f / 180.0f * M_PI;
+                         if ( angleDifference( yaw, cur_targetCheckState.targetAngle ) < 0.0f ){
                              angTurn -= 10.0f / 180.0f * M_PI;
                          }
                          Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 1); 
@@ -1096,7 +1134,7 @@
                      }
                      
                      // continue turning
-                    //  std::cout <<" Keep turning with angle diff: " << angleDifference( cur_state.yaw, cur_targetCheckState.targetAngle ) << std::endl; 
+                    //  std::cout <<" Keep turning with angle diff: " << angleDifference( cur_state_yaw, cur_targetCheckState.targetAngle ) << ", with current angle: " << cur_state_yaw << std::endl; 
                      continue;
                  }
                  else{ 
@@ -1109,7 +1147,7 @@
                          std::cout <<" Turn to the target angle, But current angle is not goable..." << std::endl;
                          angleFrontState state;
                          state.front = front;
-                         state.angle = wrap_angle(cur_state.yaw);
+                         state.angle = wrap_angle(yaw);
                          angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
  
                          // Start to find another way to go to
@@ -1120,7 +1158,7 @@
                                  continue;
                              }
  
-                             if ( std::abs( angleDifference( cur_state.yaw, pair_cand.angle ) ) <= 1.0 / 180.0f * M_PI ){
+                             if ( std::abs( angleDifference( yaw, pair_cand.angle ) ) <= 1.0 / 180.0f * M_PI ){
                                  continue;
                              }
  
@@ -1147,11 +1185,11 @@
                                  cur_targetCheckState.targetAngle = pair_cand.angle;
          
                                  // Try to turn to the angle
-                                 std::cout <<" Current angle: " << cur_state.yaw << std::endl;  
-                                 std::cout <<" Target angle: " << cur_targetCheckState.targetAngle << std::endl; 
-                                 std::cout <<" Angle difference: " << angleDifference( cur_state.yaw, cur_targetCheckState.targetAngle ) << std::endl; 
-                                 float angTurn = angleDifference( cur_state.yaw, cur_targetCheckState.targetAngle ) + 5.0f / 180.0f * M_PI;
-                                 if ( angleDifference( cur_state.yaw, cur_targetCheckState.targetAngle ) < 0.0f ){
+                                 std::cout << "Ready to turn to the target found angle..." << std::endl;
+                                //  std::cout <<" Current angle: " << cur_state_yaw <<", Target angle: " << pair_cand.angle << std::endl; 
+                                //  std::cout <<" Angle difference: " << angleDifference( cur_state_yaw, cur_targetCheckState.targetAngle ) << std::endl; 
+                                 float angTurn = angleDifference( yaw, pair_cand.angle ) + 5.0f / 180.0f * M_PI;
+                                 if ( angleDifference( yaw, pair_cand.angle ) < 0.0f ){
                                      angTurn -= 10.0f / 180.0f * M_PI;
                                  }
                                  Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 1);
@@ -1265,7 +1303,7 @@
                         time_toMove = 5;
                     }
                  }
-                 Goto(od4, cur_distToMove * std::cos( cur_state.yaw ), cur_distToMove * std::sin( cur_state.yaw ), 0.0f, 0.0f, time_toMove);
+                 Goto(od4, cur_distToMove * std::cos( cur_state_yaw ), cur_distToMove * std::sin( cur_state_yaw ), 0.0f, 0.0f, time_toMove);
                  cur_pathReachingState.pathOnGoing = true;
                  cur_pathReachingState.startFront = front;
                  on_GoTO_MODE = true;
@@ -1366,41 +1404,41 @@
                      // Initialize the vector here
                      angleFrontState_vec.clear();
                  }
-                 cur_lookAroundState.preAngle = cur_state.yaw + M_PI;
+                 cur_lookAroundState.preAngle = cur_state_yaw + M_PI;
              }
-             cur_lookAroundState.startAngle = cur_state.yaw;
+             cur_lookAroundState.startAngle = cur_state_yaw;
              Goto(od4, 0.0f, 0.0f, 0.0f, 120.0f / 180.0f * M_PI, 2);
              cur_lookAroundState.clearPathCheckStarted = true;
              on_TURNING_MODE = true;
          }
          else if ( cur_lookAroundState.turnStarted == false ){
-             if ( std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state.yaw ) ) < 110.0f / 180.0f * M_PI ){
+             if ( std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state_yaw ) ) < 110.0f / 180.0f * M_PI ){
                  if ( has_possibleInterrupt ){
                      std::cout <<" Some targets occur, so try to look up again..." << std::endl;
-                     float angTurn = 120.0f / 180.0f * M_PI - std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state.yaw ) );
+                     float angTurn = 120.0f / 180.0f * M_PI - std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state_yaw ) );
                      Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 2);
                      on_TURNING_MODE = true;
                      has_possibleInterrupt = false;
                      continue;
                  }
                  
-                 // std::cout <<" Record target with angle dev: " << std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state.yaw ) ) << ", and vector size: " << angleFrontState_vec.size() << std::endl;
+                 // std::cout <<" Record target with angle dev: " << std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state_yaw ) ) << ", and vector size: " << angleFrontState_vec.size() << std::endl;
                  // Record the angle and front
                  angleFrontState state;
                  state.front = front;
-                 state.angle = wrap_angle(cur_state.yaw);
+                 state.angle = wrap_angle(cur_state_yaw);
                  angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
                  
                  state.front = rear;
-                 state.angle = wrap_angle(cur_state.yaw + M_PI);
+                 state.angle = wrap_angle(cur_state_yaw + M_PI);
                  angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
  
                  state.front = left;
-                 state.angle = wrap_angle(cur_state.yaw + M_PI / 2.0f);
+                 state.angle = wrap_angle(cur_state_yaw + M_PI / 2.0f);
                  angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
  
                  state.front = right;
-                 state.angle = wrap_angle(cur_state.yaw - M_PI / 2.0f);
+                 state.angle = wrap_angle(cur_state_yaw - M_PI / 2.0f);
                  angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
                  // std::cout <<" Add to vector... " << std::endl;
              }
@@ -1469,16 +1507,16 @@
                          cur_lookAroundState.targetAngle = pair_cand.angle;
  
                          // Try to turn to the angle
-                         // std::cout <<" Current angle: " << cur_state.yaw << std::endl;
+                         // std::cout <<" Current angle: " << cur_state_yaw << std::endl;
                          // std::cout <<" Target angle: " << cur_lookAroundState.targetAngle << std::endl;
                          // std::cout <<" Vector size: " << angleFrontState_vec.size() << std::endl;
-                         // std::cout <<" Angle difference: " << angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) << std::endl;
-                         float angTurn = angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) + 5.0f / 180.0f * M_PI;
-                         if ( angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) < 0.0f ){
+                         // std::cout <<" Angle difference: " << angleDifference( cur_state_yaw, cur_lookAroundState.targetAngle ) << std::endl;
+                         float angTurn = angleDifference( cur_state_yaw, pair_cand.angle ) + 5.0f / 180.0f * M_PI;
+                         if ( angleDifference( cur_state_yaw, pair_cand.angle ) < 0.0f ){
                              angTurn -= 10.0f / 180.0f * M_PI;
                          }
                          Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 1);
-                         std::cout <<" Found a path to go to and start turning to target angle with target: " << cur_lookAroundState.targetAngle << std::endl;
+                         std::cout <<" Found a path to go to and start turning to target angle with target: " << pair_cand.angle << std::endl;
                          cur_lookAroundState.turnStarted = true;
                          break;
                      }
@@ -1490,26 +1528,26 @@
                      cur_lookAroundState.targetAngle = cur_lookAroundState.preAngle;
  
                      // Try to turn to the angle
-                     // std::cout <<" Current angle: " << cur_state.yaw << std::endl;
+                     // std::cout <<" Current angle: " << cur_state_yaw << std::endl;
                      // std::cout <<" Target angle: " << cur_lookAroundState.targetAngle << std::endl;
                      // std::cout <<" Vector size: " << angleFrontState_vec.size() << std::endl;
-                     // std::cout <<" Angle difference: " << angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) << std::endl;
-                     float angTurn = angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) + 5.0f / 180.0f * M_PI;
-                     if ( angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) < 0.0f ){
+                     // std::cout <<" Angle difference: " << angleDifference( cur_state_yaw, cur_lookAroundState.targetAngle ) << std::endl;
+                     float angTurn = angleDifference( cur_state_yaw, cur_lookAroundState.preAngle ) + 5.0f / 180.0f * M_PI;
+                     if ( angleDifference( cur_state_yaw, cur_lookAroundState.preAngle ) < 0.0f ){
                          angTurn -= 10.0f / 180.0f * M_PI;
                      }
                      Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 3);
-                     std::cout <<" No path to go to so start turning to the previous target angle with target: " << cur_lookAroundState.targetAngle << std::endl;
+                     std::cout <<" No path to go to so start turning to the previous target angle with target: " << cur_lookAroundState.preAngle << std::endl;
                      cur_lookAroundState.turnStarted = true;
                  }
              }
          }
          else{
-             if ( std::abs( angleDifference( cur_lookAroundState.targetAngle, cur_state.yaw ) ) >= 5.0f / 180.0f * M_PI ){
+             if ( std::abs( angleDifference( cur_lookAroundState.targetAngle, cur_state_yaw ) ) >= 5.0f / 180.0f * M_PI ){
                  if ( has_possibleInterrupt ){
                      std::cout <<" Some targets occur, so try to turn to the target look up angle again..." << std::endl;
-                     float angTurn = angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) + 5.0f / 180.0f * M_PI;
-                     if ( angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) < 0.0f ){
+                     float angTurn = angleDifference( cur_state_yaw, cur_lookAroundState.targetAngle ) + 5.0f / 180.0f * M_PI;
+                     if ( angleDifference( cur_state_yaw, cur_lookAroundState.targetAngle ) < 0.0f ){
                          angTurn -= 10.0f / 180.0f * M_PI;
                      }
                      Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 3);
@@ -1519,7 +1557,7 @@
                  }
                  
                  // continue turning
-                 // std::cout <<" Keep turning to that angle with current angle: " << cur_state.yaw << std::endl;
+                 // std::cout <<" Keep turning to that angle with current angle: " << cur_state_yaw << std::endl;
                  continue;
              }
              else{
@@ -1538,7 +1576,7 @@
                      std::cout <<" Turn to the target angle, But current angle is not goable..." << std::endl;
                      angleFrontState state;
                      state.front = front;
-                     state.angle = wrap_angle(cur_state.yaw);
+                     state.angle = wrap_angle(cur_state_yaw);
                      angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
  
                      // Start to find another way to go to
@@ -1566,13 +1604,13 @@
                              continue;
                          }
  
-                         if ( std::abs( angleDifference( cur_lookAroundState.preAngle, cur_state.yaw ) ) > 20.0f / 180 * M_PI ){
+                         if ( std::abs( angleDifference( cur_lookAroundState.preAngle, cur_state_yaw ) ) > 20.0f / 180 * M_PI ){
                              if ( std::abs( angleDifference( cur_lookAroundState.preAngle, pair_cand.angle ) ) <= 20.0f / 180 * M_PI ){
                                  continue;
                              }
                          }
  
-                         if ( std::abs( angleDifference( pair_cand.angle, cur_state.yaw ) ) <= 1.0 / 180.0f * M_PI ){
+                         if ( std::abs( angleDifference( pair_cand.angle, cur_state_yaw ) ) <= 1.0 / 180.0f * M_PI ){
                              continue;
                          }
  
@@ -1594,21 +1632,21 @@
                              }                        
                          }
  
-                         if ( hasObOnPath == false && std::abs( angleDifference( cur_lookAroundState.preAngle, cur_state.yaw ) ) > 20.0f / 180 * M_PI ){
+                         if ( hasObOnPath == false && std::abs( angleDifference( cur_lookAroundState.preAngle, cur_state_yaw ) ) > 20.0f / 180 * M_PI ){
                              // Found the path, turn to that angle
                              cur_lookAroundState.targetAngle = pair_cand.angle;
  
                              // Try to turn to the angle
-                             // std::cout <<" Current angle: " << cur_state.yaw << std::endl;
+                             // std::cout <<" Current angle: " << cur_state_yaw << std::endl;
                              // std::cout <<" Target angle: " << cur_lookAroundState.targetAngle << std::endl;
                              // std::cout <<" Vector size: " << angleFrontState_vec.size() << std::endl;
-                             // std::cout <<" Angle difference: " << angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) << std::endl;
-                             float angTurn = angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) + 5.0f / 180.0f * M_PI;
-                             if ( angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) < 0.0f ){
+                             // std::cout <<" Angle difference: " << angleDifference( cur_state_yaw, cur_lookAroundState.targetAngle ) << std::endl;
+                             float angTurn = angleDifference( cur_state_yaw, pair_cand.angle) + 5.0f / 180.0f * M_PI;
+                             if ( angleDifference( cur_state_yaw, pair_cand.angle ) < 0.0f ){
                                  angTurn -= 10.0f / 180.0f * M_PI;
                              }
                              Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 3);
-                             std::cout <<" Found a path to go to and start turning to target angle with target: " << cur_lookAroundState.targetAngle << std::endl;
+                             std::cout <<" Found a path to go to and start turning to target angle with target: " << pair_cand.angle << std::endl;
                              break;
                          }
                      }
@@ -1622,16 +1660,16 @@
                      cur_lookAroundState.targetAngle = cur_lookAroundState.preAngle;
  
                      // Try to turn to the angle
-                     // std::cout <<" Current angle: " << cur_state.yaw << std::endl;
+                     // std::cout <<" Current angle: " << cur_state_yaw << std::endl;
                      // std::cout <<" Target angle: " << cur_lookAroundState.targetAngle << std::endl;
                      // std::cout <<" Vector size: " << angleFrontState_vec.size() << std::endl;
-                     // std::cout <<" Angle difference: " << angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) << std::endl;
-                     float angTurn = angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) + 5.0f / 180.0f * M_PI;
-                     if ( angleDifference( cur_state.yaw, cur_lookAroundState.targetAngle ) < 0.0f ){
+                     // std::cout <<" Angle difference: " << angleDifference( cur_state_yaw, cur_lookAroundState.targetAngle ) << std::endl;
+                     float angTurn = angleDifference( cur_state_yaw, cur_lookAroundState.preAngle ) + 5.0f / 180.0f * M_PI;
+                     if ( angleDifference( cur_state_yaw, cur_lookAroundState.preAngle ) < 0.0f ){
                          angTurn -= 10.0f / 180.0f * M_PI;
                      }
                      Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 3);
-                     std::cout <<" No path to go to so start turning to the previous target angle with target: " << cur_lookAroundState.targetAngle << std::endl;
+                     std::cout <<" No path to go to so start turning to the previous target angle with target: " << cur_lookAroundState.preAngle << std::endl;
                      continue;                        
                  }
  

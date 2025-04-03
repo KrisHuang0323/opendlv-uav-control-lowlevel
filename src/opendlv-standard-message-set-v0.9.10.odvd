@@ -379,3 +379,7 @@ message opendlv.logic.sensation.CrazyFlieState [id = 1193] {
   float cur_yaw [id = 1];
   float battery_state [id = 2];
 }
+
+message opendlv.logic.sensation.TargetFoundState [id = 1194] {
+  uint16 target_found_count [id = 1];
+}
