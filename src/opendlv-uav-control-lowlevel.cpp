@@ -220,7 +220,8 @@
      od4->dataTrigger(opendlv::logic::action::AimDirection::ID(), onAimDirectionRead);
 
      std::atomic<int16_t> nTargetTimer{0};
-     auto onTargetTimerRead = [&nTargetTimer](cluon::data::Envelope &&env){
+     std::atomic<int16_t> is_chpad_found{0};     
+     auto onTargetTimerRead = [&nTargetTimer, &is_chpad_found](cluon::data::Envelope &&env){
          auto senderStamp = env.senderStamp();
          // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
          opendlv::logic::sensation::TargetFoundState tStatemessage = cluon::extractMessage<opendlv::logic::sensation::TargetFoundState>(std::move(env));
@@ -229,6 +230,7 @@
         //  std::lock_guard<std::mutex> lck(aimDirectionMutex);
          if ( senderStamp == 0 ){
             nTargetTimer = tStatemessage.target_found_count();
+            is_chpad_found = tStatemessage.is_chpad_found();
          }
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
@@ -254,7 +256,8 @@
      bool on_TURNING_MODE = false;
  
      // Variables for static obstacles avoidance
-     float safe_endreach_dist = 0.30;
+     float safe_endreach_ultimate_dist = 0.08;
+     float safe_endreach_dist = 0.25;
      float safe_endreach_LR_dist = 0.1;
      float cur_distToMove{0.0f};
      int time_toMove = 1;
@@ -270,6 +273,7 @@
          bool reachRear;
      };
      ReachEndState cur_reachEndState = { false, false, false, false };
+     bool isCloseToStaticObs = false;
  
      // Variables for dynamic obstacles avoidance
      float dodgeDist{0.0f};
@@ -312,6 +316,7 @@
      };
      targetCheckState cur_targetCheckState = {false, false, false, -1.0f, 100.0f / 180.0f * M_PI, -1.0f, -1.0f};
      float start_turning_angle{0.0f};
+     int16_t nTargeCount = 3; // 2 for maze and 3 for rooms
  
      // Variables for homing
     //  float homing_batterythreshold = 3.35f;
@@ -351,6 +356,8 @@
      auto frontReachingEndTime = std::chrono::high_resolution_clock::now();
      auto lookAroundStartTime = std::chrono::high_resolution_clock::now();
      auto lookAroundEndTime = std::chrono::high_resolution_clock::now();
+     auto closeStaticObsStartTime = std::chrono::high_resolution_clock::now();
+     auto closeStaticObsEndTime = std::chrono::high_resolution_clock::now();     
 
     //  State cur_state{0.0f, 0.0f};
  
@@ -504,12 +511,63 @@
              - Get the range from rangefinder
              - Check whether some ranges reach ends
          */
+        // Check if close to static obstacle
+        if ( (front <= 0.05f || rear <= 0.05f || left <= 0.05f || right <= 0.05f) ){
+            if ( isCloseToStaticObs == false ){
+                std::cout << "Too close to static obstacles!!" << std::endl;
+                std::cout << "Front: " << front << ", Rear: " << rear << ", Left: " << left << ", Right: " << right << std::endl;
+                auto closeStaticObsStartTime = std::chrono::high_resolution_clock::now();
+                isCloseToStaticObs = true;
+            }
+        }
+        else if ( isCloseToStaticObs ){
+            closeStaticObsEndTime = std::chrono::high_resolution_clock::now();
+            const std::chrono::duration<double> elapsed = closeStaticObsEndTime - closeStaticObsStartTime;
+            auto start_time_t = std::chrono::system_clock::to_time_t(
+                std::chrono::time_point_cast<std::chrono::system_clock::duration>(closeStaticObsStartTime)
+            );
+            auto end_time_t = std::chrono::system_clock::to_time_t(
+                std::chrono::time_point_cast<std::chrono::system_clock::duration>(closeStaticObsEndTime)
+            );
+
+            std::cout <<" Close static Obs with start time: " << std::ctime(&start_time_t) << std::endl;
+            std::cout <<" , end time: " << std::ctime(&end_time_t) << std::endl;
+            std::cout <<" , elapsed: " << elapsed.count() << " seconds(s)" << std::endl;
+            isCloseToStaticObs = false;
+        }
+
          float safe_dist{0.0f};
          if ( front >= 1.0f )
              safe_dist = safe_endreach_dist + front / 4 + 0.35f;
          else
              safe_dist = safe_endreach_dist;
-         if ( front <= safe_dist ){
+         if ( front <= safe_endreach_ultimate_dist ){
+            std::cout <<" Front is super close to something..." << std::endl;
+            obsStaticStartTime = std::chrono::high_resolution_clock::now();
+            if ( rear >= 0.2f + safe_endreach_ultimate_dist ){
+                Goto(od4, - 0.2f * std::cos( cur_state_yaw ), - 0.2f * std::sin( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying rear to dodge
+            }
+            else{
+                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction                
+            }
+            cur_reachEndState.reachFront = true; 
+            on_GoTO_MODE = false;
+            has_InterruptNeedToReDo = true;
+            obsStaticEndTime = std::chrono::high_resolution_clock::now();
+            const std::chrono::duration<double> elapsed = obsStaticEndTime - obsStaticStartTime;
+            auto start_time_t = std::chrono::system_clock::to_time_t(
+                std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticStartTime)
+            );
+            auto end_time_t = std::chrono::system_clock::to_time_t(
+                std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticEndTime)
+            );
+
+            std::cout <<" Obs static front complete with start time: " << std::ctime(&start_time_t) << std::endl;
+            std::cout <<" , end time: " << std::ctime(&end_time_t) << std::endl;
+            std::cout <<" , elapsed: " << elapsed.count() << " seconds(s)" << std::endl;
+            continue;
+         }
+         else if ( front <= safe_dist ){
              obsStaticStartTime = std::chrono::high_resolution_clock::now();
              if ( on_GoTO_MODE ){
                  std::cout <<" Front end meets limit." << std::endl;
@@ -534,7 +592,32 @@
              cur_reachEndState.reachFront = false;
          }
  
-         if ( left <= safe_endreach_LR_dist ){
+         if ( left <= safe_endreach_ultimate_dist ){
+            std::cout <<" Left is super close to something..." << std::endl;
+            obsStaticStartTime = std::chrono::high_resolution_clock::now();
+            if ( right >= 0.2f + safe_endreach_ultimate_dist ){
+                Goto(od4, 0.2f * std::sin( cur_state_yaw ), - 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying rear to dodge
+            }
+            else{
+                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction                
+            }
+            cur_reachEndState.reachLeft = true; 
+            has_InterruptNeedToReDo = true;
+            obsStaticEndTime = std::chrono::high_resolution_clock::now();
+            const std::chrono::duration<double> elapsed = obsStaticEndTime - obsStaticStartTime;
+            auto start_time_t = std::chrono::system_clock::to_time_t(
+                std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticStartTime)
+            );
+            auto end_time_t = std::chrono::system_clock::to_time_t(
+                std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticEndTime)
+            );
+
+            std::cout <<" Obs static left complete with start time: " << std::ctime(&start_time_t) << std::endl;
+            std::cout <<" , end time: " << std::ctime(&end_time_t) << std::endl;
+            std::cout <<" , elapsed: " << elapsed.count() << " seconds(s)" << std::endl;
+            continue;
+         }
+         else if ( left <= safe_endreach_LR_dist ){
              if ( on_TURNING_MODE ){
                  cur_preDist.left = -1.0f;
              }
@@ -590,7 +673,32 @@
              cur_reachEndState.reachLeft = false;
          }
  
-         if ( right <= safe_endreach_LR_dist ){
+         if ( right <= safe_endreach_ultimate_dist ){
+            std::cout <<" Right is super close to something..." << std::endl;
+            obsStaticStartTime = std::chrono::high_resolution_clock::now();
+            if ( left >= 0.2f + safe_endreach_ultimate_dist ){
+                Goto(od4, - 0.2f * std::sin( cur_state_yaw ), 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying rear to dodge
+            }
+            else{
+                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction                
+            }
+            cur_reachEndState.reachRight = true; 
+            has_InterruptNeedToReDo = true;
+            obsStaticEndTime = std::chrono::high_resolution_clock::now();
+            const std::chrono::duration<double> elapsed = obsStaticEndTime - obsStaticStartTime;
+            auto start_time_t = std::chrono::system_clock::to_time_t(
+                std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticStartTime)
+            );
+            auto end_time_t = std::chrono::system_clock::to_time_t(
+                std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticEndTime)
+            );
+
+            std::cout <<" Obs static right complete with start time: " << std::ctime(&start_time_t) << std::endl;
+            std::cout <<" , end time: " << std::ctime(&end_time_t) << std::endl;
+            std::cout <<" , elapsed: " << elapsed.count() << " seconds(s)" << std::endl;
+            continue;
+         }
+         else if ( right <= safe_endreach_LR_dist ){
              if ( on_TURNING_MODE ){
                  cur_preDist.right = -1.0f;
              }
@@ -646,7 +754,32 @@
              cur_reachEndState.reachRight = false;
          }
  
-         if ( rear <= safe_endreach_dist ){
+         if ( rear <= safe_endreach_ultimate_dist ){
+            std::cout <<" Rear is super close to something..." << std::endl;
+            obsStaticStartTime = std::chrono::high_resolution_clock::now();
+            if ( front >= 0.2f + safe_endreach_ultimate_dist ){
+                Goto(od4, 0.2f * std::cos( cur_state_yaw ), 0.2f * std::sin( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying rear to dodge
+            }
+            else{
+                Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction                
+            }
+            cur_reachEndState.reachRear = true; 
+            has_InterruptNeedToReDo = true;
+            obsStaticEndTime = std::chrono::high_resolution_clock::now();
+            const std::chrono::duration<double> elapsed = obsStaticEndTime - obsStaticStartTime;
+            auto start_time_t = std::chrono::system_clock::to_time_t(
+                std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticStartTime)
+            );
+            auto end_time_t = std::chrono::system_clock::to_time_t(
+                std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticEndTime)
+            );
+
+            std::cout <<" Obs static rear complete with start time: " << std::ctime(&start_time_t) << std::endl;
+            std::cout <<" , end time: " << std::ctime(&end_time_t) << std::endl;
+            std::cout <<" , elapsed: " << elapsed.count() << " seconds(s)" << std::endl;
+            continue;
+         }
+         else if ( rear <= safe_endreach_dist ){
              obsStaticStartTime = std::chrono::high_resolution_clock::now();
              if ( cur_dodgeType != DODGE_NONE ){
                  std::cout <<" Rear end meets limit." << std::endl;
@@ -889,12 +1022,12 @@
          */
          float dist_to_reach = dist_target;
          float aimDirection_to_reach = aimDirection_target;
-         if ( cur_state_battery_state <= homing_batterythreshold || nTargetTimer >= 3 ){
+         if ( cur_state_battery_state <= homing_batterythreshold || nTargetTimer >= nTargeCount ){
              dist_to_reach = dist_chpad;
              aimDirection_to_reach = aimDirection_chpad;
  
              // Find the charging pad, stop and do landing
-             if ( dist_to_reach * std::cos( aimDirection_to_reach ) <= 30.0f && dist_to_reach != -1.0f ){
+             if ( (is_chpad_found == 1||(dist_to_reach * std::cos( aimDirection_to_reach ) <= 30.0f && dist_to_reach <= 150.0f && dist_to_reach != -1.0f)) && nTargetTimer >= nTargeCount ){
                  Landing(od4, 0.0f, 3);
                  Stopping(od4);
                  std::cout <<" Successfully do landing and stopping..." << std::endl;

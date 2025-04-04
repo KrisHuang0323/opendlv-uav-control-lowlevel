@@ -382,4 +382,5 @@ message opendlv.logic.sensation.CrazyFlieState [id = 1193] {
 
 message opendlv.logic.sensation.TargetFoundState [id = 1194] {
   uint16 target_found_count [id = 1];
+  uint16 is_chpad_found [id = 2];
 }
