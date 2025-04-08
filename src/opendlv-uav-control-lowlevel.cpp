@@ -121,6 +121,7 @@
          return retCode;
      }
 
+     const float landing_batterythreshold = (commandlineArguments.count("lbat") != 0) ? std::stof(commandlineArguments["lbat"]) : 3.0;
      const float homing_batterythreshold = (commandlineArguments.count("hbat") != 0) ? std::stof(commandlineArguments["hbat"]) : 3.35;
      const float takeoff_batterythreshold = (commandlineArguments.count("tbat") != 0) ? std::stof(commandlineArguments["tbat"]) : 3.6;
  
@@ -254,6 +255,11 @@
      ValidWay cur_validWay = {-1.0f, -1.0f, -1.0f};
      bool on_GoTO_MODE = false;
      bool on_TURNING_MODE = false;
+
+     // Variables for stucks escape
+     int nFrontReachingTimer = 0;
+     float pre_front = -1.0f;
+     float front_dev = -1.0f;
  
      // Variables for static obstacles avoidance
      float safe_endreach_ultimate_dist = 0.08;
@@ -316,7 +322,7 @@
      };
      targetCheckState cur_targetCheckState = {false, false, false, -1.0f, 100.0f / 180.0f * M_PI, -1.0f, -1.0f};
      float start_turning_angle{0.0f};
-     int16_t nTargeCount = 3; // 2 for maze and 3 for rooms
+     int16_t nTargeCount = 2; // 2 for maze and 3 for rooms
  
      // Variables for homing
     //  float homing_batterythreshold = 3.35f;
@@ -357,7 +363,7 @@
      auto lookAroundStartTime = std::chrono::high_resolution_clock::now();
      auto lookAroundEndTime = std::chrono::high_resolution_clock::now();
      auto closeStaticObsStartTime = std::chrono::high_resolution_clock::now();
-     auto closeStaticObsEndTime = std::chrono::high_resolution_clock::now();     
+     auto closeStaticObsEndTime = std::chrono::high_resolution_clock::now();   
 
     //  State cur_state{0.0f, 0.0f};
  
@@ -505,12 +511,38 @@
              }
              // std::cout <<" Valid way checking start... with left " << cur_validWay.toLeft << ", with right: " << cur_validWay.toRight << ", with rear: " << cur_validWay.toRear << ", and current angle: " << cur_state_yaw << std::endl;
          }
+
+         /*
+             Stucks Escape
+         */
+         if ( pre_front == -1.0f ){
+            pre_front = front;
+            nFrontReachingTimer += 1;
+         }
+         else if ( nFrontReachingTimer <= 5000){
+            float dev = std::abs( pre_front - front );
+            if ( dev > front_dev ){
+                front_dev = dev;
+            }
+            nFrontReachingTimer += 1;
+         }
+         else{
+            if ( front_dev <= 0.1f ){
+                has_InterruptNeedToReDo = true;
+                std::cout << "Stucks at some positions, try to escape by redo..." << std::endl;
+            }
+            nFrontReachingTimer = 0;
+            pre_front = -1.0f;
+            front_dev = -1.0f;
+         }
+
  
          /*
              Obstacle Avoidance for walls or static obstacles
              - Get the range from rangefinder
              - Check whether some ranges reach ends
          */
+         // Check if the crazyflie stucks at some points
         // Check if close to static obstacle
         if ( (front <= 0.05f || rear <= 0.05f || left <= 0.05f || right <= 0.05f) ){
             if ( isCloseToStaticObs == false ){
@@ -1027,26 +1059,31 @@
              aimDirection_to_reach = aimDirection_chpad;
  
              // Find the charging pad, stop and do landing
-             if ( (is_chpad_found == 1||(dist_to_reach * std::cos( aimDirection_to_reach ) <= 30.0f && dist_to_reach <= 150.0f && dist_to_reach != -1.0f)) && nTargetTimer >= nTargeCount ){
-                 Landing(od4, 0.0f, 3);
-                 Stopping(od4);
-                 std::cout <<" Successfully do landing and stopping..." << std::endl;
- 
-                 // Record the end time
-                 taskEndTime = std::chrono::high_resolution_clock::now();
-                 const std::chrono::duration<double> elapsed = taskEndTime - taskStartTime;
- 
-                 auto start_time_t = std::chrono::system_clock::to_time_t(
-                     std::chrono::time_point_cast<std::chrono::system_clock::duration>(taskStartTime)
-                 );
-                 auto end_time_t = std::chrono::system_clock::to_time_t(
-                     std::chrono::time_point_cast<std::chrono::system_clock::duration>(taskEndTime)
-                 );
- 
-                 std::cout <<" Task complete with start time: " << std::ctime(&start_time_t) << std::endl;
-                 std::cout <<" , end time: " << std::ctime(&end_time_t) << std::endl;
-                 std::cout <<" , elapsed: " << elapsed.count() << " seconds(s)" << std::endl;
-                 break;
+             if ( (is_chpad_found == 1||(dist_to_reach * std::cos( aimDirection_to_reach ) <= 30.0f && dist_to_reach <= 150.0f && dist_to_reach != -1.0f)) ){
+                if ( cur_state_battery_state <= landing_batterythreshold || nTargetTimer >= nTargeCount ) {
+                    Landing(od4, 0.0f, 3);
+                    Stopping(od4);
+                    if ( nTargetTimer >= nTargeCount )
+                        std::cout <<" Successfully do landing and stopping with all targets found..." << std::endl;
+                    else if ( cur_state_battery_state <= landing_batterythreshold )
+                        std::cout <<" Successfully do landing and stopping with low battery..." << std::endl;
+    
+                    // Record the end time
+                    taskEndTime = std::chrono::high_resolution_clock::now();
+                    const std::chrono::duration<double> elapsed = taskEndTime - taskStartTime;
+    
+                    auto start_time_t = std::chrono::system_clock::to_time_t(
+                        std::chrono::time_point_cast<std::chrono::system_clock::duration>(taskStartTime)
+                    );
+                    auto end_time_t = std::chrono::system_clock::to_time_t(
+                        std::chrono::time_point_cast<std::chrono::system_clock::duration>(taskEndTime)
+                    );
+    
+                    std::cout <<" Task complete with start time: " << std::ctime(&start_time_t) << std::endl;
+                    std::cout <<" , end time: " << std::ctime(&end_time_t) << std::endl;
+                    std::cout <<" , elapsed: " << elapsed.count() << " seconds(s)" << std::endl;
+                    break;
+                }
              }
          }
  
