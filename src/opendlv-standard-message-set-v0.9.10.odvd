@@ -380,7 +380,11 @@ message opendlv.logic.sensation.CrazyFlieState [id = 1193] {
   float battery_state [id = 2];
 }
 
-message opendlv.logic.sensation.TargetFoundState [id = 1194] {
-  uint16 target_found_count [id = 1];
-  uint16 is_chpad_found [id = 2];
+message opendlv.logic.sensation.RewardRecord [id = 1194] {
+  float too_close_ball_timer [id = 1];
+  uint16 too_close_ball_count [id = 2];
+  float too_close_staticobs_timer [id = 3];
+  uint16 too_close_staticobs_count [id = 4];
+  uint16 target_found_count [id = 5];
+  uint16 is_chpad_found [id = 6];
 }
