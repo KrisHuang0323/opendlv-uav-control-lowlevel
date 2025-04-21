@@ -297,6 +297,8 @@
          bool reachRear;
      };
      ReachEndState cur_reachEndState = { false, false, false, false };
+     bool staticDodgeLeft = false;
+     bool staticDodgeRight = false;
      bool isCloseToStaticObs = false;
  
      // Variables for dynamic obstacles avoidance
@@ -423,6 +425,7 @@
          float dist_to_reach = dist_target;
          float aimDirection_to_reach = aimDirection_target;
          if ( cur_state_battery_state <= homing_batterythreshold || nTargetTimer >= nTargeCount ){
+            //  std::cout <<" Change to find the charging pad: " << nTargeCount << std::endl;
              dist_to_reach = dist_chpad;
              aimDirection_to_reach = aimDirection_chpad;
  
@@ -662,23 +665,25 @@
              }           
          }
          else{
-             obsStaticEndTime = std::chrono::high_resolution_clock::now();
-             const std::chrono::duration<double> elapsed = obsStaticEndTime - obsStaticStartTime;
-             auto start_time_t = std::chrono::system_clock::to_time_t(
-                 std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticStartTime)
-             );
-             auto end_time_t = std::chrono::system_clock::to_time_t(
-                 std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticEndTime)
-             );
-
-             std::cout <<" Obs static front complete with start time: " << std::ctime(&start_time_t) << std::endl;
-             std::cout <<" , end time: " << std::ctime(&end_time_t) << std::endl;
-             std::cout <<" , elapsed: " << elapsed.count() << " seconds(s)" << std::endl;
-
-             ObsStaticElapsed += elapsed.count();
-             std::cout <<" , average front static obs elapsed: " << ObsStaticElapsed / nObsStaticCount << " seconds(s)" << std::endl;
-             std::cout <<" , so far has close to front static obs for " << nObsStaticCount << " times" << std::endl;
-             cur_reachEndState.reachFront = false;
+             if ( cur_reachEndState.reachFront ){
+                obsStaticEndTime = std::chrono::high_resolution_clock::now();
+                const std::chrono::duration<double> elapsed = obsStaticEndTime - obsStaticStartTime;
+                auto start_time_t = std::chrono::system_clock::to_time_t(
+                    std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticStartTime)
+                );
+                auto end_time_t = std::chrono::system_clock::to_time_t(
+                    std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticEndTime)
+                );
+   
+                std::cout <<" Obs static front complete with start time: " << std::ctime(&start_time_t) << std::endl;
+                std::cout <<" , end time: " << std::ctime(&end_time_t) << std::endl;
+                std::cout <<" , elapsed: " << elapsed.count() << " seconds(s)" << std::endl;
+   
+                ObsStaticElapsed += elapsed.count();
+                std::cout <<" , average front static obs elapsed: " << ObsStaticElapsed / nObsStaticCount << " seconds(s)" << std::endl;
+                std::cout <<" , so far has close to front static obs for " << nObsStaticCount << " times" << std::endl;
+                cur_reachEndState.reachFront = false;
+             }
          }
  
          if ( left <= safe_endreach_ultimate_dist ){
@@ -698,7 +703,7 @@
             continue;
          }
          else if ( left <= safe_endreach_LR_dist ){
-             if ( on_TURNING_MODE ){
+             if ( on_GoTO_MODE == false ){
                  cur_preDist.left = -1.0f;
              }
              else{
@@ -712,10 +717,11 @@
                      std::cout <<" Cur toRight: "<< cur_validWay.toRight << std::endl;
                      if ( cur_validWay.toRight >= safe_endreach_LR_dist + 0.2f ){
                          std::cout <<" Left end meets limit with right direction dodge..." << std::endl;
-                         if ( has_possibleInterrupt == false ){
+                         if ( staticDodgeLeft == false ){
                             nObsStaticCount += 1;
                             has_possibleInterrupt = true;
                             obsStaticStartTime = std::chrono::high_resolution_clock::now();
+                            staticDodgeLeft = true;
                          }
                          Goto(od4, 0.2f * std::sin( cur_state_yaw ), - 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
                          continue;
@@ -733,23 +739,26 @@
              }
          }
          else{ 
-             obsStaticEndTime = std::chrono::high_resolution_clock::now();
-             const std::chrono::duration<double> elapsed = obsStaticEndTime - obsStaticStartTime;
-             auto start_time_t = std::chrono::system_clock::to_time_t(
-                 std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticStartTime)
-             );
-             auto end_time_t = std::chrono::system_clock::to_time_t(
-                 std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticEndTime)
-             );
-
-             std::cout <<" Obs static left complete with start time: " << std::ctime(&start_time_t) << std::endl;
-             std::cout <<" , end time: " << std::ctime(&end_time_t) << std::endl;
-             std::cout <<" , elapsed: " << elapsed.count() << " seconds(s)" << std::endl;
-
-             ObsStaticElapsed += elapsed.count();
-             std::cout <<" , average left static obs elapsed: " << ObsStaticElapsed / nObsStaticCount << " seconds(s)" << std::endl;
-             std::cout <<" , so far has close to left static obs for " << nObsStaticCount << " times" << std::endl;
-             cur_reachEndState.reachLeft = false;
+             if ( staticDodgeLeft || cur_reachEndState.reachLeft ){
+                obsStaticEndTime = std::chrono::high_resolution_clock::now();
+                const std::chrono::duration<double> elapsed = obsStaticEndTime - obsStaticStartTime;
+                auto start_time_t = std::chrono::system_clock::to_time_t(
+                    std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticStartTime)
+                );
+                auto end_time_t = std::chrono::system_clock::to_time_t(
+                    std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticEndTime)
+                );
+   
+                std::cout <<" Obs static left complete with start time: " << std::ctime(&start_time_t) << std::endl;
+                std::cout <<" , end time: " << std::ctime(&end_time_t) << std::endl;
+                std::cout <<" , elapsed: " << elapsed.count() << " seconds(s)" << std::endl;
+   
+                ObsStaticElapsed += elapsed.count();
+                std::cout <<" , average left static obs elapsed: " << ObsStaticElapsed / nObsStaticCount << " seconds(s)" << std::endl;
+                std::cout <<" , so far has close to left static obs for " << nObsStaticCount << " times" << std::endl;
+                staticDodgeLeft = false;
+                cur_reachEndState.reachLeft = false;
+             }
          }
  
          if ( right <= safe_endreach_ultimate_dist ){
@@ -769,7 +778,7 @@
             continue;
          }
          else if ( right <= safe_endreach_LR_dist ){
-             if ( on_TURNING_MODE ){
+             if ( on_GoTO_MODE == false ){
                  cur_preDist.right = -1.0f;
              }
              else{
@@ -783,12 +792,13 @@
                      std::cout <<" Cur toLeft: "<< cur_validWay.toLeft << std::endl;
                      if ( cur_validWay.toLeft >= safe_endreach_LR_dist + 0.2f ){
                          std::cout <<" Right end meets limit with left direction dodge..." << std::endl;
-                         Goto(od4, - 0.2f * std::sin( cur_state_yaw ), 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
-                         if ( has_possibleInterrupt == false ){
+                         if ( staticDodgeRight == false ){
+                            staticDodgeRight = true;
                             has_possibleInterrupt = true;
                             obsStaticStartTime = std::chrono::high_resolution_clock::now();
                             nObsStaticCount += 1;
                          }
+                         Goto(od4, - 0.2f * std::sin( cur_state_yaw ), 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
                          continue;
                      }
                      else{
@@ -804,23 +814,26 @@
              }
          }
          else{
-             obsStaticEndTime = std::chrono::high_resolution_clock::now();
-             const std::chrono::duration<double> elapsed = obsStaticEndTime - obsStaticStartTime;
-             auto start_time_t = std::chrono::system_clock::to_time_t(
-                 std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticStartTime)
-             );
-             auto end_time_t = std::chrono::system_clock::to_time_t(
-                 std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticEndTime)
-             );
-
-             std::cout <<" Obs static right complete with start time: " << std::ctime(&start_time_t) << std::endl;
-             std::cout <<" , end time: " << std::ctime(&end_time_t) << std::endl;
-             std::cout <<" , elapsed: " << elapsed.count() << " seconds(s)" << std::endl;
-
-             ObsStaticElapsed += elapsed.count();
-             std::cout <<" , average right static obs elapsed: " << ObsStaticElapsed / nObsStaticCount << " seconds(s)" << std::endl;
-             std::cout <<" , so far has close to right static obs for " << nObsStaticCount << " times" << std::endl;
-             cur_reachEndState.reachRight = false;
+             if ( staticDodgeRight || cur_reachEndState.reachRight ){
+                obsStaticEndTime = std::chrono::high_resolution_clock::now();
+                const std::chrono::duration<double> elapsed = obsStaticEndTime - obsStaticStartTime;
+                auto start_time_t = std::chrono::system_clock::to_time_t(
+                    std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticStartTime)
+                );
+                auto end_time_t = std::chrono::system_clock::to_time_t(
+                    std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticEndTime)
+                );
+   
+                std::cout <<" Obs static right complete with start time: " << std::ctime(&start_time_t) << std::endl;
+                std::cout <<" , end time: " << std::ctime(&end_time_t) << std::endl;
+                std::cout <<" , elapsed: " << elapsed.count() << " seconds(s)" << std::endl;
+   
+                ObsStaticElapsed += elapsed.count();
+                std::cout <<" , average right static obs elapsed: " << ObsStaticElapsed / nObsStaticCount << " seconds(s)" << std::endl;
+                std::cout <<" , so far has close to right static obs for " << nObsStaticCount << " times" << std::endl;
+                staticDodgeRight = false;
+                cur_reachEndState.reachRight = false;
+             }
          }
  
          if ( rear <= safe_endreach_ultimate_dist ){
@@ -840,7 +853,7 @@
             continue;
          }
          else if ( rear <= safe_endreach_dist ){
-             if ( on_GoTO_MODE ){
+             if ( cur_dodgeType != DODGE_NONE ){
                  std::cout <<" Rear end meets limit." << std::endl;
                  Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction
                  if ( cur_reachEndState.reachRear == false ){
@@ -852,23 +865,25 @@
              }          
          }
          else{
-             obsStaticEndTime = std::chrono::high_resolution_clock::now();
-             const std::chrono::duration<double> elapsed = obsStaticEndTime - obsStaticStartTime;
-             auto start_time_t = std::chrono::system_clock::to_time_t(
-                 std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticStartTime)
-             );
-             auto end_time_t = std::chrono::system_clock::to_time_t(
-                 std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticEndTime)
-             );
-
-             std::cout <<" Obs static rear complete with start time: " << std::ctime(&start_time_t) << std::endl;
-             std::cout <<" , end time: " << std::ctime(&end_time_t) << std::endl;
-             std::cout <<" , elapsed: " << elapsed.count() << " seconds(s)" << std::endl;
-
-             ObsStaticElapsed += elapsed.count();
-             std::cout <<" , average rear static obs elapsed: " << ObsStaticElapsed / nObsStaticCount << " seconds(s)" << std::endl;
-             std::cout <<" , so far has close to rear static obs for " << nObsStaticCount << " times" << std::endl;
-             cur_reachEndState.reachRear = false;
+             if ( cur_reachEndState.reachRear ){
+                obsStaticEndTime = std::chrono::high_resolution_clock::now();
+                const std::chrono::duration<double> elapsed = obsStaticEndTime - obsStaticStartTime;
+                auto start_time_t = std::chrono::system_clock::to_time_t(
+                    std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticStartTime)
+                );
+                auto end_time_t = std::chrono::system_clock::to_time_t(
+                    std::chrono::time_point_cast<std::chrono::system_clock::duration>(obsStaticEndTime)
+                );
+   
+                std::cout <<" Obs static rear complete with start time: " << std::ctime(&start_time_t) << std::endl;
+                std::cout <<" , end time: " << std::ctime(&end_time_t) << std::endl;
+                std::cout <<" , elapsed: " << elapsed.count() << " seconds(s)" << std::endl;
+   
+                ObsStaticElapsed += elapsed.count();
+                std::cout <<" , average rear static obs elapsed: " << ObsStaticElapsed / nObsStaticCount << " seconds(s)" << std::endl;
+                std::cout <<" , so far has close to rear static obs for " << nObsStaticCount << " times" << std::endl;
+                cur_reachEndState.reachRear = false;
+             }
          }
  
          /*
@@ -1377,7 +1392,7 @@
 
                  if ( std::abs( angleDifference( cur_targetCheckState.targetAngle, yaw ) ) >= 5.0f / 180.0f * M_PI ){
                      // Do the returning if something interrupt
-                     if ( has_possibleInterrupt ){
+                     if ( has_possibleInterrupt|| has_possibleInterrupt_dynamic ){
                          std::cout <<" Some targets occur, so try to turn to the target again..." << std::endl;
                          auto start_time_t = std::chrono::system_clock::to_time_t(
                              std::chrono::time_point_cast<std::chrono::system_clock::duration>(targetFindingStartTime)
@@ -1550,51 +1565,45 @@
  
          // If being interrupted, try to go to the original path again
          if ( has_possibleInterrupt || has_possibleInterrupt_dynamic || has_InterruptNeedToReDo || has_InterruptNeedToReDo_dynamic ){
-             std::chrono::duration<double> elapsed;
-             if ( ( has_possibleInterrupt && has_possibleInterrupt_dynamic ) || ( has_InterruptNeedToReDo && has_InterruptNeedToReDo_dynamic ) ){
-                 std::chrono::duration<double> e1 = obsStaticStartTime - targetFindingStartTime;
-                 std::chrono::duration<double> e2 = obsDynamicStartTime - targetFindingStartTime;
-                 if ( e1.count() > e2.count() ){
-                     elapsed = e1;
-                 }
-                 else{
-                     elapsed = e2;
-                 }
-             }
-             else if ( has_possibleInterrupt || has_InterruptNeedToReDo )
-                 elapsed = obsStaticStartTime - targetFindingStartTime;
-             else if ( has_possibleInterrupt_dynamic || has_InterruptNeedToReDo_dynamic )
-                 elapsed = obsDynamicStartTime - targetFindingStartTime;
+             if ( cur_pathReachingState.pathReadyToGo && cur_pathReachingState.pathOnGoing ){
+                std::cout <<" Being interrupted and try to go again..." << std::endl;
+                cur_pathReachingState.pathOnGoing = false;
+                std::chrono::duration<double> elapsed;
+                if ( ( has_possibleInterrupt && has_possibleInterrupt_dynamic ) || ( has_InterruptNeedToReDo && has_InterruptNeedToReDo_dynamic ) ){
+                    std::chrono::duration<double> e1 = obsStaticStartTime - targetFindingStartTime;
+                    std::chrono::duration<double> e2 = obsDynamicStartTime - targetFindingStartTime;
+                    if ( e1.count() > e2.count() ){
+                        elapsed = e1;
+                    }
+                    else{
+                        elapsed = e2;
+                    }
+                }
+                else if ( has_possibleInterrupt || has_InterruptNeedToReDo )
+                    elapsed = obsStaticStartTime - targetFindingStartTime;
+                else if ( has_possibleInterrupt_dynamic || has_InterruptNeedToReDo_dynamic )
+                    elapsed = obsDynamicStartTime - targetFindingStartTime;
 
-             auto start_time_t = std::chrono::system_clock::to_time_t(
-                 std::chrono::time_point_cast<std::chrono::system_clock::duration>(frontReachingStartTime)
-             );
-            //  const std::chrono::duration<double> elapsed = std::chrono::high_resolution_clock::now() - frontReachingStartTime;
-             std::cout <<" Original front reaching start time: " << std::ctime(&start_time_t) << std::endl;
-             std::cout <<" Interrupted time(due to dodging) is: " << elapsed.count() << "seconds(s)" << std::endl;
-             FrontReachingElapsed += elapsed.count();
-            
-             if ( cur_pathReachingState.pathReadyToGo && cur_pathReachingState.pathOnGoing && ( has_possibleInterrupt || has_possibleInterrupt_dynamic ) ){
-                 std::cout <<" Being interrupted and try to go again..." << std::endl;
-                 cur_pathReachingState.pathOnGoing = false;
-             }
- 
-             if ( cur_pathReachingState.pathReadyToGo && cur_pathReachingState.pathOnGoing && ( has_InterruptNeedToReDo || has_InterruptNeedToReDo_dynamic ) ){
-                 std::cout <<" Being interrupted and try to go again..." << std::endl;
-                 cur_pathReachingState.pathOnGoing = false;
-             }
+                auto start_time_t = std::chrono::system_clock::to_time_t(
+                    std::chrono::time_point_cast<std::chrono::system_clock::duration>(frontReachingStartTime)
+                );
+                //  const std::chrono::duration<double> elapsed = std::chrono::high_resolution_clock::now() - frontReachingStartTime;
+                std::cout <<" Original front reaching start time: " << std::ctime(&start_time_t) << std::endl;
+                std::cout <<" Interrupted time(due to dodging) is: " << elapsed.count() << "seconds(s)" << std::endl;
+                FrontReachingElapsed += elapsed.count();    
 
-             if ( has_possibleInterrupt )
-                has_possibleInterrupt = false;
-             if ( has_possibleInterrupt_dynamic )
-                has_possibleInterrupt_dynamic = false;
-             if ( has_InterruptNeedToReDo )
-                has_InterruptNeedToReDo = false;
-             if ( has_InterruptNeedToReDo_dynamic )
-                has_InterruptNeedToReDo_dynamic = false;
+                if ( has_possibleInterrupt )
+                    has_possibleInterrupt = false;
+                if ( has_possibleInterrupt_dynamic )
+                    has_possibleInterrupt_dynamic = false;
+                if ( has_InterruptNeedToReDo )
+                    has_InterruptNeedToReDo = false;
+                if ( has_InterruptNeedToReDo_dynamic )
+                    has_InterruptNeedToReDo_dynamic = false;
 
-             // Restart the timer again             
-             frontReachingStartTime = std::chrono::high_resolution_clock::now(); 
+                // Restart the timer again             
+                frontReachingStartTime = std::chrono::high_resolution_clock::now(); 
+             }
          }
  
          // Go to path
