@@ -276,6 +276,7 @@
 
      // Variables for stucks escape
      int nFrontReachingTimer = 0;
+     int nStuckEscapeCount = 0;
      float pre_front = -1.0f;
      float front_dev = -1.0f;
  
@@ -467,6 +468,7 @@
                     std::cout <<" , so far has closed to ball for " << closeBallCount << " times" << std::endl;
                     std::cout <<" , average close to static obs elapsed: " << closeStaticObsTimer / closeStaticObsCount << " seconds(s)" << std::endl;
                     std::cout <<" , so far has closed to static obs for " << closeStaticObsCount << " times" << std::endl;
+                    std::cout <<" , so far has escaped from stucks for " << nStuckEscapeCount << " times" << std::endl;
                     break;
                 }
              }
@@ -614,6 +616,7 @@
             if ( front_dev <= 0.1f ){
                 has_InterruptNeedToReDo = true;
                 std::cout << "Stucks at some positions, try to escape by redo..." << std::endl;
+                nStuckEscapeCount += 1;
             }
             nFrontReachingTimer = 0;
             pre_front = -1.0f;
