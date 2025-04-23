@@ -432,12 +432,12 @@
  
              // Find the charging pad, stop and do landing
              if ( (is_chpad_found == 1||(dist_to_reach * std::cos( aimDirection_to_reach ) <= 30.0f && dist_to_reach <= 150.0f && dist_to_reach != -1.0f)) ){
-                if ( cur_state_battery_state <= landing_batterythreshold || nTargetTimer >= nTargeCount ) {
+                if ( cur_state_battery_state <= homing_batterythreshold || nTargetTimer >= nTargeCount ) {
                     Landing(od4, 0.0f, 3);
                     Stopping(od4);
                     if ( nTargetTimer >= nTargeCount )
                         std::cout <<" Successfully do landing and stopping with all targets found..." << std::endl;
-                    else if ( cur_state_battery_state <= landing_batterythreshold )
+                    else if ( cur_state_battery_state <= homing_batterythreshold )
                         std::cout <<" Do landing and stopping with low battery..." << std::endl;
     
                     // Record the end time
@@ -841,7 +841,7 @@
  
          if ( rear <= safe_endreach_ultimate_dist ){
             std::cout <<" Rear is super close to something..." << std::endl;
-            if ( front >= 0.2f + safe_endreach_ultimate_dist ){
+            if ( rear >= 0.2f + safe_endreach_ultimate_dist ){
                 Goto(od4, 0.2f * std::cos( cur_state_yaw ), 0.2f * std::sin( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying rear to dodge
             }
             else{
