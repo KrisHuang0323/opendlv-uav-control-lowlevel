@@ -435,7 +435,7 @@
                 if ( cur_state_battery_state <= homing_batterythreshold || nTargetTimer >= nTargeCount ) {
                     Landing(od4, 0.0f, 3);
                     Stopping(od4);
-                    if ( nTargetTimer >= nTargeCount )
+                    if ( nTargetTimer >= nTargeCount && is_chpad_found == 1 )
                         std::cout <<" Successfully do landing and stopping with all targets found..." << std::endl;
                     else if ( cur_state_battery_state <= homing_batterythreshold )
                         std::cout <<" Do landing and stopping with low battery..." << std::endl;
@@ -1230,13 +1230,13 @@
                      float angTurn = 90.0f / 180.0f * M_PI;
                      cur_targetCheckState.ang_toTurn = angTurn;
                      cur_targetCheckState.startAngle = cur_state_yaw;    
-                     Goto(od4, 0.0f, 0.0f, 0.0f, angTurn + 10.0f / 180.0f * M_PI, 2); 
+                     Goto(od4, 0.0f, 0.0f, 0.0f, angTurn + 10.0f / 180.0f * M_PI, 4); 
                  }
                  else{
                      float angTurn = -90.0f / 180.0f * M_PI;
                      cur_targetCheckState.ang_toTurn = angTurn;
                      cur_targetCheckState.startAngle = cur_state_yaw;    
-                     Goto(od4, 0.0f, 0.0f, 0.0f, angTurn - 10.0f / 180.0f * M_PI, 2);
+                     Goto(od4, 0.0f, 0.0f, 0.0f, angTurn - 10.0f / 180.0f * M_PI, 4);
                  }
                  std::cout <<" Angle to turn: " << cur_targetCheckState.ang_toTurn << std::endl;   
                  cur_targetCheckState.aimTurnStarted = true;   
@@ -1444,6 +1444,7 @@
                      std::this_thread::sleep_for(std::chrono::milliseconds(500));
  
                      // If current front is not goable
+                     bool hasNotFoundPath = false;
                      if ( front <= safe_endreach_dist + 0.7 / 2 ){
                          std::cout <<" Turn to the target angle, But current angle is not goable..." << std::endl;
                          angleFrontState state;
@@ -1493,18 +1494,28 @@
                                  if ( angleDifference( yaw, pair_cand.angle ) < 0.0f ){
                                      angTurn -= 10.0f / 180.0f * M_PI;
                                  }
-                                 Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 1);
+                                 Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 2);
                                  break;
                              }
                          }
-                         continue;                        
+                         if ( hasObOnPath == false ){
+                            continue;      
+                         }        
+                         else{
+                            hasNotFoundPath = true;
+                         }          
                      }
  
                      // Ready to go to path
-                     std::cout <<" Turn to the target angle, ready to go to it..." << std::endl;
-                     cur_pathReachingState.pathReadyToGo = true;
-                     cur_targetCheckState.pointToTarget = true;
-                     ori_front = front;
+                     if ( hasNotFoundPath == false ){
+                        std::cout <<" Turn to the target angle, ready to go to it..." << std::endl;
+                        cur_pathReachingState.pathReadyToGo = true;
+                        cur_targetCheckState.pointToTarget = true;
+                        ori_front = front;
+                     }
+                     else{
+                        std::cout <<" Can not find goable direction, restart look around..." << std::endl;
+                     }
      
                      // Reset other flags
                      cur_targetCheckState.aimTurnStarted = false;
