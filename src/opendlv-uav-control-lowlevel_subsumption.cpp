@@ -252,24 +252,25 @@ int32_t main(int32_t argc, char **argv) {
     // float takeoff_batterythreshold = 3.6f;
 
     // Constant variables that won't change(for now, migt be tuned later)
-    int nCount = 3;
-    if ( maptype == 1 )
-        nCount = 2;
     struct constVarStruct{
         const float safe_endreach_ultimate_dist = 0.08;
         const float safe_endreach_dist = 0.25;
         const float safe_endreach_LR_dist = 0.1;
-        const int16_t nTargetCount = nCount; // 2 for maze and 3 for rooms 
+        int16_t nTargetCount;
     };
     constVarStruct cur_constVarStruct;
+    int nCount = 3;
+    if ( maptype == 1 )
+        nCount = 2;
+    cur_constVarStruct.nTargetCount = nCount;
 
     // Variables for suppressing
     std::mutex suppressMutex;
     struct suppressStruct{
-        std::atomic<bool> isSupressAll = false;
-        std::atomic<bool> isSupressTargetFinding = false;
-        std::atomic<bool> isSupressFrontReaching = false;
-        std::atomic<bool> isSupressLookAround = false;
+        std::atomic<bool> isSupressAll{false};
+        std::atomic<bool> isSupressTargetFinding{false};
+        std::atomic<bool> isSupressFrontReaching{false};
+        std::atomic<bool> isSupressLookAround{false};
     };
     suppressStruct cur_suppressStruct;
 
@@ -325,8 +326,8 @@ int32_t main(int32_t argc, char **argv) {
         bool isCloseToStaticObs = false;        
         int nObsStaticCount = 0;
         double ObsStaticElapsed = 0.0f;
-        std::chrono::steady_clock::time_point obsStaticStartTime = std::chrono::high_resolution_clock::now();
-        std::chrono::steady_clock::time_point obsStaticEndTime = std::chrono::high_resolution_clock::now();
+        std::chrono::high_resolution_clock::time_point obsStaticStartTime = std::chrono::high_resolution_clock::now();
+        std::chrono::high_resolution_clock::time_point obsStaticEndTime = std::chrono::high_resolution_clock::now();
     };
     staticObsStruct cur_staticObsStruct;
 
@@ -360,8 +361,8 @@ int32_t main(int32_t argc, char **argv) {
         bool has_InterruptNeedToReDo_dynamic = false;        
         int nObsDynamicCount = 0;
         double ObsDynamicElapsed = 0.0f;
-        std::chrono::steady_clock::time_point obsDynamicStartTime = std::chrono::high_resolution_clock::now();
-        std::chrono::steady_clock::time_point obsDynamicEndTime = std::chrono::high_resolution_clock::now();
+        std::chrono::high_resolution_clock::time_point obsDynamicStartTime = std::chrono::high_resolution_clock::now();
+        std::chrono::high_resolution_clock::time_point obsDynamicEndTime = std::chrono::high_resolution_clock::now();
     };
     dynamicObsStruct cur_dynamicObsStruct;
 
@@ -376,8 +377,8 @@ int32_t main(int32_t argc, char **argv) {
         pathReachingState cur_pathReachingState = {false, false, -1.0f};        
         int nfrontReachingCount = 0;
         double FrontReachingElapsed = 0.0f;
-        std::chrono::steady_clock::time_point frontReachingStartTime = std::chrono::high_resolution_clock::now();
-        std::chrono::steady_clock::time_point frontReachingEndTime = std::chrono::high_resolution_clock::now();
+        std::chrono::high_resolution_clock::time_point frontReachingStartTime = std::chrono::high_resolution_clock::now();
+        std::chrono::high_resolution_clock::time_point frontReachingEndTime = std::chrono::high_resolution_clock::now();
     };
     frontReachingStruct cur_frontReachingStruct;
 
@@ -400,8 +401,8 @@ int32_t main(int32_t argc, char **argv) {
         float aimDirection_to_reach;   
         int nTargetFindingCount = 0;
         double TargetFindingElapsed = 0.0f;
-        std::chrono::steady_clock::time_point targetFindingStartTime = std::chrono::high_resolution_clock::now();
-        std::chrono::steady_clock::time_point targetFindingEndTime = std::chrono::high_resolution_clock::now();
+        std::chrono::high_resolution_clock::time_point targetFindingStartTime = std::chrono::high_resolution_clock::now();
+        std::chrono::high_resolution_clock::time_point targetFindingEndTime = std::chrono::high_resolution_clock::now();
     };
     targetFindingStruct cur_targetFindingStruct;
 
@@ -430,18 +431,18 @@ int32_t main(int32_t argc, char **argv) {
         float ori_front{0.0f};        
         int nlookAroundCount = 0;
         double LookAroundElapsed = 0.0f;
-        std::chrono::steady_clock::time_point lookAroundStartTime = std::chrono::high_resolution_clock::now();
-        std::chrono::steady_clock::time_point lookAroundEndTime = std::chrono::high_resolution_clock::now(); 
+        std::chrono::high_resolution_clock::time_point lookAroundStartTime = std::chrono::high_resolution_clock::now();
+        std::chrono::high_resolution_clock::time_point lookAroundEndTime = std::chrono::high_resolution_clock::now(); 
     };
     lookAroundStruct cur_lookAroundStruct;
 
     // Timer to record time of each behaviour
     auto taskStartTime = std::chrono::high_resolution_clock::now();
     auto taskEndTime = std::chrono::high_resolution_clock::now();
-    std::atomic<bool> isTerminateThread = false;
+    std::atomic<bool> isTerminateThread{false};
 
     // Take off first
-    while ( cur_state.battery_state <= takeoff_batterythreshold ){
+    while ( cur_sensorReadStruct.cur_state_battery_state <= takeoff_batterythreshold ){
         std::cout <<" Battery is too low for taking off..." << std::endl;
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
@@ -5110,6 +5111,19 @@ int32_t main(int32_t argc, char **argv) {
             safe_endreach_LR_dist = cur_constVarStruct.safe_endreach_LR_dist;
             nTargetCount = cur_constVarStruct.nTargetCount;
         }
+
+        // Variables for stuck escape check
+        int nFrontReachingTimer = 0;
+        int nStuckEscapeCount = 0;
+        float pre_front = -1.0f;
+        float front_dev = -1.0f;
+        {
+            std::lock_guard<std::mutex> lck(stuckEscapeMutex);
+            nFrontReachingTimer = cur_stuckEscapeStruct.nFrontReachingTimer;
+            nStuckEscapeCount = cur_stuckEscapeStruct.nStuckEscapeCount;
+            pre_front = cur_stuckEscapeStruct.pre_front;
+            front_dev = cur_stuckEscapeStruct.front_dev;
+        } 
 
         // Variables for valid range
         std::vector<distPathState> distPathstate_vec;
