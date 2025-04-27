@@ -267,10 +267,11 @@ int32_t main(int32_t argc, char **argv) {
     // Variables for suppressing
     std::mutex suppressMutex;
     struct suppressStruct{
-        std::atomic<bool> isSupressAll{false};
-        std::atomic<bool> isSupressTargetFinding{false};
-        std::atomic<bool> isSupressFrontReaching{false};
-        std::atomic<bool> isSupressLookAround{false};
+        std::atomic<bool> isObsStaticDominating{false};
+        std::atomic<bool> isObsDynamicDominating{false};
+        std::atomic<bool> isTargetFindingDominating{false};
+        std::atomic<bool> isFrontReachingDominating{false};
+        std::atomic<bool> isSupressFrontReaching{false};        
     };
     suppressStruct cur_suppressStruct;
 
@@ -1011,7 +1012,7 @@ int32_t main(int32_t argc, char **argv) {
                 }
                 {
                     std::lock_guard<std::mutex> lck(suppressMutex);
-                    cur_suppressStruct.isSupressAll = true;
+                    cur_suppressStruct.isObsStaticDominating = true;
                 }
                 if ( rear >= 0.2f + safe_endreach_ultimate_dist ){
                     Goto(od4, - 0.2f * std::cos( cur_state_yaw ), - 0.2f * std::sin( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying rear to dodge
@@ -1020,7 +1021,7 @@ int32_t main(int32_t argc, char **argv) {
                     Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction  
                     {
                         std::lock_guard<std::mutex> lck(suppressMutex);
-                        cur_suppressStruct.isSupressAll = false;
+                        cur_suppressStruct.isObsStaticDominating = false;
                         cur_suppressStruct.isSupressFrontReaching = true;
                     }              
                 }
@@ -1049,12 +1050,12 @@ int32_t main(int32_t argc, char **argv) {
                     }
                     {
                         std::lock_guard<std::mutex> lck(suppressMutex);
-                        cur_suppressStruct.isSupressAll = true;
+                        cur_suppressStruct.isObsStaticDominating = true;
                     }
                     Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction
                     {
                         std::lock_guard<std::mutex> lck(suppressMutex);
-                        cur_suppressStruct.isSupressAll = false;
+                        cur_suppressStruct.isObsStaticDominating = false;
                         cur_suppressStruct.isSupressFrontReaching = true;
                     }
                 }           
@@ -1088,7 +1089,7 @@ int32_t main(int32_t argc, char **argv) {
                 
                 {
                     std::lock_guard<std::mutex> lck(suppressMutex);
-                    cur_suppressStruct.isSupressAll = false;
+                    cur_suppressStruct.isObsStaticDominating = false;
                     cur_suppressStruct.isSupressFrontReaching = false;
                 }
             }
@@ -1115,7 +1116,7 @@ int32_t main(int32_t argc, char **argv) {
                 }
                 {
                     std::lock_guard<std::mutex> lck(suppressMutex);
-                    cur_suppressStruct.isSupressAll = true;
+                    cur_suppressStruct.isObsStaticDominating = true;
                 }
                 if ( right >= 0.2f + safe_endreach_ultimate_dist ){
                     Goto(od4, 0.2f * std::sin( cur_state_yaw ), - 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying rear to dodge
@@ -1124,7 +1125,7 @@ int32_t main(int32_t argc, char **argv) {
                     Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction    
                     {
                         std::lock_guard<std::mutex> lck(suppressMutex);
-                        cur_suppressStruct.isSupressAll = false;
+                        cur_suppressStruct.isObsStaticDominating = false;
                         cur_suppressStruct.isSupressFrontReaching = true;
                     }            
                 }    
@@ -1177,7 +1178,7 @@ int32_t main(int32_t argc, char **argv) {
                             }
                             {
                                 std::lock_guard<std::mutex> lck(suppressMutex);
-                                cur_suppressStruct.isSupressAll = true;
+                                cur_suppressStruct.isObsStaticDominating = true;
                             }
                             Goto(od4, 0.2f * std::sin( cur_state_yaw ), - 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge                        
                             continue;
@@ -1199,12 +1200,12 @@ int32_t main(int32_t argc, char **argv) {
                             }
                             {
                                 std::lock_guard<std::mutex> lck(suppressMutex);
-                                cur_suppressStruct.isSupressAll = true;
+                                cur_suppressStruct.isObsStaticDominating = true;
                             }
                             Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction  
                             {
                                 std::lock_guard<std::mutex> lck(suppressMutex);
-                                cur_suppressStruct.isSupressAll = false;
+                                cur_suppressStruct.isObsStaticDominating = false;
                                 cur_suppressStruct.isSupressFrontReaching = true;
                             }
                         }
@@ -1244,7 +1245,7 @@ int32_t main(int32_t argc, char **argv) {
                 
                 {
                     std::lock_guard<std::mutex> lck(suppressMutex);
-                    cur_suppressStruct.isSupressAll = false;
+                    cur_suppressStruct.isObsStaticDominating = false;
                     cur_suppressStruct.isSupressFrontReaching = false;
                 }
             }
@@ -1271,7 +1272,7 @@ int32_t main(int32_t argc, char **argv) {
                 }
                 {
                     std::lock_guard<std::mutex> lck(suppressMutex);
-                    cur_suppressStruct.isSupressAll = true;
+                    cur_suppressStruct.isObsStaticDominating = true;
                 }
                 if ( left >= 0.2f + safe_endreach_ultimate_dist ){
                     Goto(od4, - 0.2f * std::sin( cur_state_yaw ), 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying rear to dodge
@@ -1280,7 +1281,7 @@ int32_t main(int32_t argc, char **argv) {
                     Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction  
                     {
                         std::lock_guard<std::mutex> lck(suppressMutex);
-                        cur_suppressStruct.isSupressAll = false;
+                        cur_suppressStruct.isObsStaticDominating = false;
                         cur_suppressStruct.isSupressFrontReaching = true;
                     }              
                 }
@@ -1333,7 +1334,7 @@ int32_t main(int32_t argc, char **argv) {
                             }
                             {
                                 std::lock_guard<std::mutex> lck(suppressMutex);
-                                cur_suppressStruct.isSupressAll = true;
+                                cur_suppressStruct.isObsStaticDominating = true;
                             }
                             Goto(od4, - 0.2f * std::sin( cur_state_yaw ), 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
                             continue;
@@ -1355,12 +1356,12 @@ int32_t main(int32_t argc, char **argv) {
                             }
                             {
                                 std::lock_guard<std::mutex> lck(suppressMutex);
-                                cur_suppressStruct.isSupressAll = true;
+                                cur_suppressStruct.isObsStaticDominating = true;
                             }
                             Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction  
                             {
                                 std::lock_guard<std::mutex> lck(suppressMutex);
-                                cur_suppressStruct.isSupressAll = false;
+                                cur_suppressStruct.isObsStaticDominating = false;
                                 cur_suppressStruct.isSupressFrontReaching = true;
                             }
                         }
@@ -1400,7 +1401,7 @@ int32_t main(int32_t argc, char **argv) {
 
                 {
                     std::lock_guard<std::mutex> lck(suppressMutex);
-                    cur_suppressStruct.isSupressAll = false;
+                    cur_suppressStruct.isObsStaticDominating = false;
                     cur_suppressStruct.isSupressFrontReaching = false;
                 }
             }
@@ -1427,7 +1428,7 @@ int32_t main(int32_t argc, char **argv) {
                 }
                 {
                     std::lock_guard<std::mutex> lck(suppressMutex);
-                    cur_suppressStruct.isSupressAll = true;
+                    cur_suppressStruct.isObsStaticDominating = true;
                 }
                 if ( rear >= 0.2f + safe_endreach_ultimate_dist ){
                     Goto(od4, 0.2f * std::cos( cur_state_yaw ), 0.2f * std::sin( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying rear to dodge
@@ -1436,7 +1437,7 @@ int32_t main(int32_t argc, char **argv) {
                     Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction    
                     {
                         std::lock_guard<std::mutex> lck(suppressMutex);
-                        cur_suppressStruct.isSupressAll = false;
+                        cur_suppressStruct.isObsStaticDominating = false;
                         cur_suppressStruct.isSupressFrontReaching = true;
                     }            
                 }
@@ -1465,12 +1466,12 @@ int32_t main(int32_t argc, char **argv) {
                     }
                     {
                         std::lock_guard<std::mutex> lck(suppressMutex);
-                        cur_suppressStruct.isSupressAll = true;
+                        cur_suppressStruct.isObsStaticDominating = true;
                     }                    
                     Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction
                     {
                         std::lock_guard<std::mutex> lck(suppressMutex);
-                        cur_suppressStruct.isSupressAll = false;
+                        cur_suppressStruct.isObsStaticDominating = false;
                         cur_suppressStruct.isSupressFrontReaching = true;
                     }
                 }          
@@ -1506,7 +1507,7 @@ int32_t main(int32_t argc, char **argv) {
 
                 {
                     std::lock_guard<std::mutex> lck(suppressMutex);
-                    cur_suppressStruct.isSupressAll = false;
+                    cur_suppressStruct.isObsStaticDominating = false;
                     cur_suppressStruct.isSupressFrontReaching = false;
                 }
             }    
@@ -1523,7 +1524,7 @@ int32_t main(int32_t argc, char **argv) {
         while( od4->isRunning() && isTerminateThread == false ){
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-            if ( cur_suppressStruct.isSupressAll ){
+            if ( cur_suppressStruct.isObsStaticDominating ){
                 // std::cout << "Dynamic obs task being suppressed!" << std::endl;
                 continue;
             }   // Wait until the domination change to the dynamic obstacle domination
@@ -1669,9 +1670,7 @@ int32_t main(int32_t argc, char **argv) {
                     obsDynamicStartTime = std::chrono::high_resolution_clock::now();
                     {
                         std::lock_guard<std::mutex> lck(suppressMutex);
-                        cur_suppressStruct.isSupressTargetFinding = true;
-                        cur_suppressStruct.isSupressFrontReaching = true;
-                        cur_suppressStruct.isSupressLookAround = true;
+                        cur_suppressStruct.isObsDynamicDominating = true;
                     }
                     {
                         std::lock_guard<std::mutex> lck(dynamicObsMutex);
@@ -2047,9 +2046,7 @@ int32_t main(int32_t argc, char **argv) {
                 
                 {
                     std::lock_guard<std::mutex> lck(suppressMutex);
-                    cur_suppressStruct.isSupressTargetFinding = false;
-                    cur_suppressStruct.isSupressFrontReaching = false;
-                    cur_suppressStruct.isSupressLookAround = false;
+                    cur_suppressStruct.isObsDynamicDominating = false;
                 }
 
                 obsDynamicEndTime = std::chrono::high_resolution_clock::now();
@@ -2100,7 +2097,7 @@ int32_t main(int32_t argc, char **argv) {
         while( od4->isRunning() && isTerminateThread == false ){
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-            if ( cur_suppressStruct.isSupressAll || cur_suppressStruct.isSupressTargetFinding ){
+            if ( cur_suppressStruct.isObsStaticDominating || cur_suppressStruct.isObsDynamicDominating ){
                 // std::cout << "Target finding task being suppressed!" << std::endl;
                 continue;
             }   // Wait until the domination change to target finding
@@ -2418,8 +2415,7 @@ int32_t main(int32_t argc, char **argv) {
                     std::cout <<" Find target start turning..." << std::endl;   
                     {
                         std::lock_guard<std::mutex> lck(suppressMutex);
-                        cur_suppressStruct.isSupressFrontReaching = true;
-                        cur_suppressStruct.isSupressLookAround= true;
+                        cur_suppressStruct.isTargetFindingDominating = true;
                     }
                     // Stop first
                     Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false, false);
@@ -2491,8 +2487,7 @@ int32_t main(int32_t argc, char **argv) {
                             targetFindingStartTime = std::chrono::high_resolution_clock::now(); 
                             {
                                 std::lock_guard<std::mutex> lck(suppressMutex);
-                                cur_suppressStruct.isSupressFrontReaching = true;
-                                cur_suppressStruct.isSupressLookAround= true;
+                                cur_suppressStruct.isTargetFindingDominating = true;
                             }
 
                             float angDev = std::abs( angleDifference( cur_targetCheckState.startAngle, cur_state_yaw ) );
@@ -2675,8 +2670,7 @@ int32_t main(int32_t argc, char **argv) {
                             targetFindingStartTime = std::chrono::high_resolution_clock::now();
                             {
                                 std::lock_guard<std::mutex> lck(suppressMutex);
-                                cur_suppressStruct.isSupressFrontReaching = true;
-                                cur_suppressStruct.isSupressLookAround= true;
+                                cur_suppressStruct.isTargetFindingDominating = true;
                             }
                             
                             float angTurn = angleDifference( yaw, cur_targetCheckState.targetAngle ) + 5.0f / 180.0f * M_PI;
@@ -2803,16 +2797,15 @@ int32_t main(int32_t argc, char **argv) {
                          
                             {
                                 std::lock_guard<std::mutex> lck(suppressMutex);
-                                cur_suppressStruct.isSupressFrontReaching = false;
-                                cur_suppressStruct.isSupressLookAround= true;
+                                cur_suppressStruct.isTargetFindingDominating = false;
+                                cur_suppressStruct.isFrontReachingDominating= true;
                             }
                         }
                         else{
                             std::cout <<" Can not find goable direction, restart look around..." << std::endl;
                             {
                                 std::lock_guard<std::mutex> lck(suppressMutex);
-                                cur_suppressStruct.isSupressFrontReaching = false;
-                                cur_suppressStruct.isSupressLookAround= false;
+                                cur_suppressStruct.isTargetFindingDominating = false;
                             }
                         }
 
@@ -2872,7 +2865,8 @@ int32_t main(int32_t argc, char **argv) {
         while( od4->isRunning() && isTerminateThread == false ){
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-            if ( cur_suppressStruct.isSupressAll || cur_suppressStruct.isSupressFrontReaching ){
+            if ( cur_suppressStruct.isObsStaticDominating || cur_suppressStruct.isObsDynamicDominating
+                 || cur_suppressStruct.isTargetFindingDominating || cur_suppressStruct.isSupressFrontReaching ){
                 // std::cout << "Front reaching task being suppressed!" << std::endl;
                 continue;
             }   // Wait until the domination change to target finding
@@ -3176,7 +3170,7 @@ int32_t main(int32_t argc, char **argv) {
                     nfrontReachingCount += 1;
                     {
                         std::lock_guard<std::mutex> lck(suppressMutex);
-                        cur_suppressStruct.isSupressLookAround = true;
+                        cur_suppressStruct.isFrontReachingDominating = true;
                     }
                     Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false);
                     std::cout <<" Start go to action with front: " << front << std::endl;
@@ -3262,7 +3256,7 @@ int32_t main(int32_t argc, char **argv) {
 
                     {
                         std::lock_guard<std::mutex> lck(suppressMutex);
-                        cur_suppressStruct.isSupressLookAround = false;
+                        cur_suppressStruct.isFrontReachingDominating = false;
                     }
 
                     frontReachingEndTime = std::chrono::high_resolution_clock::now();
@@ -3322,7 +3316,8 @@ int32_t main(int32_t argc, char **argv) {
         while( od4->isRunning() && isTerminateThread == false ){            
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-            if ( cur_suppressStruct.isSupressAll || cur_suppressStruct.isSupressLookAround ){
+            if ( cur_suppressStruct.isObsStaticDominating || cur_suppressStruct.isObsDynamicDominating
+                || cur_suppressStruct.isTargetFindingDominating || cur_suppressStruct.isFrontReachingDominating ){
                 // std::cout << "look around task being suppressed!" << std::endl;
                 continue;
             }   // Wait until the domination change to target finding
