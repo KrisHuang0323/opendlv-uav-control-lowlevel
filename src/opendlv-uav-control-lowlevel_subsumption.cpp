@@ -1524,8 +1524,11 @@ int32_t main(int32_t argc, char **argv) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
             if ( cur_suppressStruct.isSupressAll ){
+                // std::cout << "Dynamic obs task being suppressed!" << std::endl;
                 continue;
             }   // Wait until the domination change to the dynamic obstacle domination
+
+            // std::cout << "I am in the dynamic obs task!" << std::endl;
           
             // Variables here        
             float front{0};
@@ -2098,8 +2101,12 @@ int32_t main(int32_t argc, char **argv) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
             if ( cur_suppressStruct.isSupressAll || cur_suppressStruct.isSupressTargetFinding ){
+                // std::cout << "Target finding task being suppressed!" << std::endl;
                 continue;
             }   // Wait until the domination change to target finding
+
+
+            // std::cout << "I am in the target finding task!" << std::endl;
 
             // Variables here        
             float front{0};
@@ -2720,11 +2727,11 @@ int32_t main(int32_t argc, char **argv) {
                             // Check for clear path
                             bool hasObOnPath = false; 
                             for ( const auto& pair_cand : angleFrontState_vec ){
-                                if ( pair_cand.front <= safe_endreach_dist){
+                                if ( pair_cand.front <= safe_endreach_dist + 0.7 / 2 ){
                                     continue;
                                 }
 
-                                if ( std::abs( angleDifference( yaw, pair_cand.angle ) ) <= 1.0 / 180.0f * M_PI ){
+                                if ( std::abs( angleDifference( yaw, pair_cand.angle ) ) <= 7.5 / 180.0f * M_PI ){
                                     continue;
                                 }
 
@@ -2793,21 +2800,26 @@ int32_t main(int32_t argc, char **argv) {
                                 std::lock_guard<std::mutex> lck(lookAroundMutex);
                                 cur_lookAroundStruct.ori_front = cur_lookAroundStruct.ori_front;
                             } 
+                         
+                            {
+                                std::lock_guard<std::mutex> lck(suppressMutex);
+                                cur_suppressStruct.isSupressFrontReaching = false;
+                                cur_suppressStruct.isSupressLookAround= true;
+                            }
                         }
                         else{
                             std::cout <<" Can not find goable direction, restart look around..." << std::endl;
+                            {
+                                std::lock_guard<std::mutex> lck(suppressMutex);
+                                cur_suppressStruct.isSupressFrontReaching = false;
+                                cur_suppressStruct.isSupressLookAround= false;
+                            }
                         }
 
                         // Reset other flags
                         cur_targetCheckState.aimTurnStarted = false;
                         cur_targetCheckState.turnStarted = false;
                         on_TURNING_MODE = false;
-                         
-                        {
-                            std::lock_guard<std::mutex> lck(suppressMutex);
-                            cur_suppressStruct.isSupressFrontReaching = false;
-                            cur_suppressStruct.isSupressLookAround= false;
-                        }
 
                         targetFindingEndTime = std::chrono::high_resolution_clock::now();
                         const std::chrono::duration<double> elapsed = targetFindingEndTime - targetFindingStartTime;
@@ -2861,8 +2873,11 @@ int32_t main(int32_t argc, char **argv) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
             if ( cur_suppressStruct.isSupressAll || cur_suppressStruct.isSupressFrontReaching ){
+                // std::cout << "Front reaching task being suppressed!" << std::endl;
                 continue;
             }   // Wait until the domination change to target finding
+
+            // std::cout << "I am in the front reaching task!" << std::endl;
 
             // Variables here        
             float front{0};
@@ -3308,8 +3323,11 @@ int32_t main(int32_t argc, char **argv) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
             if ( cur_suppressStruct.isSupressAll || cur_suppressStruct.isSupressLookAround ){
+                // std::cout << "look around task being suppressed!" << std::endl;
                 continue;
             }   // Wait until the domination change to target finding
+
+            // std::cout << "I am in the look around task!" << std::endl;
 
             // Variables here        
             float front{0};

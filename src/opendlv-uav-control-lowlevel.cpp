@@ -1456,11 +1456,11 @@
                          // Check for clear path
                          bool hasObOnPath = false; 
                          for ( const auto& pair_cand : angleFrontState_vec ){
-                             if ( pair_cand.front <= safe_endreach_dist){
+                             if ( pair_cand.front <= safe_endreach_dist + 0.7 / 2 ){
                                  continue;
                              }
  
-                             if ( std::abs( angleDifference( yaw, pair_cand.angle ) ) <= 1.0 / 180.0f * M_PI ){
+                             if ( std::abs( angleDifference( yaw, pair_cand.angle ) ) <= 7.5 / 180.0f * M_PI ){
                                  continue;
                              }
  
