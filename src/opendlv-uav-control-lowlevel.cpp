@@ -2021,6 +2021,7 @@
                      // Check for clear path
                      std::cout <<" Start path checking..." << std::endl;
                      bool hasObOnPath = false; 
+                     bool hasFoundPath = false;
                      for ( const auto& pair_cand : angleFrontState_vec ){
                          if ( pair_cand.front <= safe_endreach_dist + pair_cand.front / 5 ){
                              continue;
@@ -2056,6 +2057,7 @@
  
                          if ( hasObOnPath == false && std::abs( angleDifference( cur_lookAroundState.preAngle, cur_state_yaw ) ) > 20.0f / 180 * M_PI ){
                              // Found the path, turn to that angle
+                             hasFoundPath = true;
                              cur_lookAroundState.targetAngle = pair_cand.angle;
  
                              // Try to turn to the angle
@@ -2073,12 +2075,12 @@
                          }
                      }
  
-                     // If turning still not starting, we return to previous angle
-                     if ( hasObOnPath == false ){
+                     // Found the path, turn to that angle
+                     if ( hasFoundPath ){
                          continue;
                      }
  
-                     // Found the path, turn to that angle
+                     // If turning still not starting, we return to previous angle
                      cur_lookAroundState.targetAngle = cur_lookAroundState.preAngle;
  
                      // Try to turn to the angle

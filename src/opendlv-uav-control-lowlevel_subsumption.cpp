@@ -572,6 +572,18 @@ int32_t main(int32_t argc, char **argv) {
                     distPathState pstate = { pair.front*std::cos( angDev ), pair.front*std::sin( angDev ) }; 
                     distPathstate_vec.insert( distPathstate_vec.begin(), pstate );              
                 }
+
+                // Set variables back
+                {
+                    std::lock_guard<std::mutex> lck(validRangeMutex);
+                    cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
+                    cur_validRangeStruct.cur_validWay.toRear = cur_validWay.toRear;
+                    cur_validRangeStruct.preFront_togo = preFront_togo;
+                }
+                {
+                    std::lock_guard<std::mutex> lck(lookAroundMutex);
+                    cur_lookAroundStruct.ori_front = ori_front;
+                }
             }
 
             // Refresh valid left/right/rear on the way
@@ -608,6 +620,14 @@ int32_t main(int32_t argc, char **argv) {
                 cur_validWay.toRear += preFront_togo - front;
                 preFront_togo = front;
                 // std::cout <<" Refresh distpath on goto mode with rear: " << cur_validWay.toRear << std::endl;
+                
+                // Set variables back
+                {
+                    std::lock_guard<std::mutex> lck(validRangeMutex);
+                    cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
+                    cur_validRangeStruct.cur_validWay.toRear = cur_validWay.toRear;
+                    cur_validRangeStruct.preFront_togo = preFront_togo;
+                }
             }
 
             // Start valid way checking
@@ -653,26 +673,13 @@ int32_t main(int32_t argc, char **argv) {
                     cur_validWay.toRight = right;
                 }
                 // std::cout <<" Valid way checking start... with left " << cur_validWay.toLeft << ", with right: " << cur_validWay.toRight << ", with rear: " << cur_validWay.toRear << ", and current angle: " << cur_state_yaw << std::endl;
-            }
-
-            // Set variables back
-            {
-                std::lock_guard<std::mutex> lck(validRangeMutex);
-                cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                cur_validRangeStruct.cur_validWay = cur_validWay;
-                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                cur_validRangeStruct.preFront_togo = preFront_togo;
-            }
-            {
-                std::lock_guard<std::mutex> lck(lookAroundMutex);
-                cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
-                cur_lookAroundStruct.cur_lookAroundState = cur_lookAroundState;
-                cur_lookAroundStruct.ori_front = ori_front;
-                cur_lookAroundStruct.nlookAroundCount = nlookAroundCount;
-                cur_lookAroundStruct.LookAroundElapsed = LookAroundElapsed;
-                cur_lookAroundStruct.lookAroundStartTime = lookAroundStartTime;
-                cur_lookAroundStruct.lookAroundEndTime = lookAroundEndTime;
+                
+                // Set variables back
+                {
+                    std::lock_guard<std::mutex> lck(validRangeMutex);
+                    cur_validRangeStruct.cur_validWay.toLeft = cur_validWay.toLeft;
+                    cur_validRangeStruct.cur_validWay.toRight = cur_validWay.toRight;
+                }
             }
         }              
     });
@@ -772,49 +779,61 @@ int32_t main(int32_t argc, char **argv) {
             if ( pre_front == -1.0f ){
                 pre_front = front;
                 nFrontReachingTimer += 1;
+
+                // Set variables back            
+                {
+                    std::lock_guard<std::mutex> lck(stuckEscapeMutex);
+                    cur_stuckEscapeStruct.nFrontReachingTimer = nFrontReachingTimer;
+                    cur_stuckEscapeStruct.pre_front = pre_front;
+                } 
             }
             else if ( nFrontReachingTimer <= 1000){
                 float dev = std::abs( pre_front - front );
                 if ( dev > front_dev ){
-                    front_dev = dev;
+                    front_dev = dev;   
+
+                    // Set variables back        
+                    {
+                        std::lock_guard<std::mutex> lck(stuckEscapeMutex);
+                        cur_stuckEscapeStruct.front_dev = front_dev;
+                    } 
                 }
                 nFrontReachingTimer += 1;
+
+                // Set variables back            
+                {
+                    std::lock_guard<std::mutex> lck(stuckEscapeMutex);
+                    cur_stuckEscapeStruct.nFrontReachingTimer = nFrontReachingTimer;
+                } 
             }
             else{
                 if ( front_dev <= 0.1f ){
                     has_InterruptNeedToReDo = true;
                     std::cout << "Stucks at some positions, try to escape by redo..." << std::endl;
                     nStuckEscapeCount += 1;
+
+                    // Set variables back            
+                    {
+                        std::lock_guard<std::mutex> lck(stuckEscapeMutex);
+                        cur_stuckEscapeStruct.nStuckEscapeCount = nStuckEscapeCount;
+                    } 
+                    {
+                        std::lock_guard<std::mutex> lck(dynamicObsMutex);
+                        cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
+                    }  
                 }
                 nFrontReachingTimer = 0;
                 pre_front = -1.0f;
                 front_dev = -1.0f;
-            }
 
-            // Set variables back            
-            {
-                std::lock_guard<std::mutex> lck(stuckEscapeMutex);
-                cur_stuckEscapeStruct.nFrontReachingTimer = nFrontReachingTimer;
-                cur_stuckEscapeStruct.nStuckEscapeCount = nStuckEscapeCount;
-                cur_stuckEscapeStruct.pre_front = pre_front;
-                cur_stuckEscapeStruct.front_dev = front_dev;
-            } 
-            {
-                std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-            }  
+                // Set variables back            
+                {
+                    std::lock_guard<std::mutex> lck(stuckEscapeMutex);
+                    cur_stuckEscapeStruct.nFrontReachingTimer = nFrontReachingTimer;
+                    cur_stuckEscapeStruct.pre_front = pre_front;
+                    cur_stuckEscapeStruct.front_dev = front_dev;
+                } 
+            }
         }
     });
 
@@ -973,6 +992,22 @@ int32_t main(int32_t argc, char **argv) {
                     cur_reachEndState.reachFront = true; 
                     on_GoTO_MODE = false;
                     has_InterruptNeedToReDo = true;
+                
+                    // Set variables back
+                    {
+                        std::lock_guard<std::mutex> lck(validRangeMutex);
+                        cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
+                    }
+                    {
+                        std::lock_guard<std::mutex> lck(staticObsMutex);
+                        cur_staticObsStruct.cur_reachEndState.reachFront = cur_reachEndState.reachFront;
+                        cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
+                        cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
+                    } 
+                    {
+                        std::lock_guard<std::mutex> lck(dynamicObsMutex);
+                        cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
+                    } 
                 }
                 {
                     std::lock_guard<std::mutex> lck(suppressMutex);
@@ -989,46 +1024,6 @@ int32_t main(int32_t argc, char **argv) {
                         cur_suppressStruct.isSupressFrontReaching = true;
                     }              
                 }
-                
-                // Set variables back
-                {
-                    std::lock_guard<std::mutex> lck(validRangeMutex);
-                    cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                    cur_validRangeStruct.cur_validWay = cur_validWay;
-                    cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                    cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                    cur_validRangeStruct.preFront_togo = preFront_togo;
-                }
-                {
-                    std::lock_guard<std::mutex> lck(staticObsMutex);
-                    cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                    cur_staticObsStruct.time_toMove = time_toMove;
-                    cur_staticObsStruct.cur_preDist = cur_preDist;
-                    cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                    cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                    cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                    cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                    cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                    cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                    cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                    cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                } 
-                {
-                    std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                    cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                    cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                    cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                    cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                    cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                    cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                    cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                    cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                    cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                    cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                    cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                    cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                    cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-                } 
                 continue;
             }
             else if ( front <= safe_dist ){
@@ -1038,7 +1033,19 @@ int32_t main(int32_t argc, char **argv) {
                         nObsStaticCount += 1;
                         obsStaticStartTime = std::chrono::high_resolution_clock::now();
                         cur_reachEndState.reachFront = true; 
-                        on_GoTO_MODE = false;                    
+                        on_GoTO_MODE = false;  
+                
+                        // Set variables back
+                        {
+                            std::lock_guard<std::mutex> lck(validRangeMutex);
+                            cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
+                        }
+                        {
+                            std::lock_guard<std::mutex> lck(staticObsMutex);
+                            cur_staticObsStruct.cur_reachEndState.reachFront = cur_reachEndState.reachFront;
+                            cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
+                            cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
+                        }                   
                     }
                     {
                         std::lock_guard<std::mutex> lck(suppressMutex);
@@ -1071,6 +1078,12 @@ int32_t main(int32_t argc, char **argv) {
                     std::cout <<" , average front static obs elapsed: " << ObsStaticElapsed / nObsStaticCount << " seconds(s)" << std::endl;
                     std::cout <<" , so far has close to front static obs for " << nObsStaticCount << " times" << std::endl;
                     cur_reachEndState.reachFront = false;
+                    {
+                        std::lock_guard<std::mutex> lck(staticObsMutex);
+                        cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
+                        cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
+                        cur_staticObsStruct.cur_reachEndState.reachFront = cur_reachEndState.reachFront;
+                    }                     
                 }
                 
                 {
@@ -1086,7 +1099,19 @@ int32_t main(int32_t argc, char **argv) {
                     nObsStaticCount += 1;
                     obsStaticStartTime = std::chrono::high_resolution_clock::now();
                     cur_reachEndState.reachLeft = true; 
-                    has_InterruptNeedToReDo = true;
+                    has_InterruptNeedToReDo = true;             
+                
+                    // Set variables back
+                    {
+                        std::lock_guard<std::mutex> lck(staticObsMutex);
+                        cur_staticObsStruct.cur_reachEndState.reachLeft = cur_reachEndState.reachLeft;
+                        cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
+                        cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
+                    } 
+                    {
+                        std::lock_guard<std::mutex> lck(dynamicObsMutex);
+                        cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
+                    } 
                 }
                 {
                     std::lock_guard<std::mutex> lck(suppressMutex);
@@ -1102,52 +1127,18 @@ int32_t main(int32_t argc, char **argv) {
                         cur_suppressStruct.isSupressAll = false;
                         cur_suppressStruct.isSupressFrontReaching = true;
                     }            
-                }
-                    
-                // Set variables back
-                {
-                    std::lock_guard<std::mutex> lck(validRangeMutex);
-                    cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                    cur_validRangeStruct.cur_validWay = cur_validWay;
-                    cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                    cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                    cur_validRangeStruct.preFront_togo = preFront_togo;
-                }
-                {
-                    std::lock_guard<std::mutex> lck(staticObsMutex);
-                    cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                    cur_staticObsStruct.time_toMove = time_toMove;
-                    cur_staticObsStruct.cur_preDist = cur_preDist;
-                    cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                    cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                    cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                    cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                    cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                    cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                    cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                    cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                } 
-                {
-                    std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                    cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                    cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                    cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                    cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                    cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                    cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                    cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                    cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                    cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                    cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                    cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                    cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                    cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-                } 
+                }    
                 continue;
             }
             else if ( left <= safe_endreach_LR_dist ){
                 if ( on_GoTO_MODE == false ){
-                    cur_preDist.left = -1.0f;
+                    cur_preDist.left = -1.0f;           
+                
+                    // Set variables back
+                    {
+                        std::lock_guard<std::mutex> lck(staticObsMutex);
+                        cur_staticObsStruct.cur_preDist.left = cur_preDist.left;
+                    } 
                 }
                 else{
                     if ( cur_preDist.left == -1.0f || cur_preDist.left <= left ){
@@ -1156,42 +1147,8 @@ int32_t main(int32_t argc, char **argv) {
                 
                         // Set variables back
                         {
-                            std::lock_guard<std::mutex> lck(validRangeMutex);
-                            cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                            cur_validRangeStruct.cur_validWay = cur_validWay;
-                            cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                            cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                            cur_validRangeStruct.preFront_togo = preFront_togo;
-                        }
-                        {
                             std::lock_guard<std::mutex> lck(staticObsMutex);
-                            cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                            cur_staticObsStruct.time_toMove = time_toMove;
-                            cur_staticObsStruct.cur_preDist = cur_preDist;
-                            cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                            cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                            cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                            cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                            cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                            cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                            cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                            cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                        } 
-                        {
-                            std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                            cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                            cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                            cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                            cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                            cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                            cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                            cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                            cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                            cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                            cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                            cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                            cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                            cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
+                            cur_staticObsStruct.cur_preDist.left = cur_preDist.left;
                         } 
                         continue;
                     }
@@ -1204,53 +1161,25 @@ int32_t main(int32_t argc, char **argv) {
                                 nObsStaticCount += 1;
                                 has_possibleInterrupt = true;
                                 obsStaticStartTime = std::chrono::high_resolution_clock::now();
-                                staticDodgeLeft = true;
+                                staticDodgeLeft = true;                                
+                
+                                // Set variables back
+                                {
+                                    std::lock_guard<std::mutex> lck(staticObsMutex);
+                                    cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
+                                    cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
+                                    cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
+                                } 
+                                {
+                                    std::lock_guard<std::mutex> lck(dynamicObsMutex);
+                                    cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
+                                } 
                             }
                             {
                                 std::lock_guard<std::mutex> lck(suppressMutex);
                                 cur_suppressStruct.isSupressAll = true;
                             }
-                            Goto(od4, 0.2f * std::sin( cur_state_yaw ), - 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
-                            
-                            // Set variables back
-                            {
-                                std::lock_guard<std::mutex> lck(validRangeMutex);
-                                cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                                cur_validRangeStruct.cur_validWay = cur_validWay;
-                                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                                cur_validRangeStruct.preFront_togo = preFront_togo;
-                            }
-                            {
-                                std::lock_guard<std::mutex> lck(staticObsMutex);
-                                cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                                cur_staticObsStruct.time_toMove = time_toMove;
-                                cur_staticObsStruct.cur_preDist = cur_preDist;
-                                cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                                cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                                cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                                cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                                cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                                cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                                cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                                cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                            } 
-                            {
-                                std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                                cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                                cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                                cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                                cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                                cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                                cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                                cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                                cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                                cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                                cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-                            }                          
+                            Goto(od4, 0.2f * std::sin( cur_state_yaw ), - 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge                        
                             continue;
                         }
                         else{
@@ -1258,7 +1187,15 @@ int32_t main(int32_t argc, char **argv) {
                             if ( cur_reachEndState.reachLeft == false ){
                                 nObsStaticCount += 1;
                                 cur_reachEndState.reachLeft = true;
-                                obsStaticStartTime = std::chrono::high_resolution_clock::now();
+                                obsStaticStartTime = std::chrono::high_resolution_clock::now();                           
+                
+                                // Set variables back
+                                {
+                                    std::lock_guard<std::mutex> lck(staticObsMutex);
+                                    cur_staticObsStruct.cur_reachEndState.reachLeft = cur_reachEndState.reachLeft;
+                                    cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
+                                    cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
+                                } 
                             }
                             {
                                 std::lock_guard<std::mutex> lck(suppressMutex);
@@ -1294,6 +1231,15 @@ int32_t main(int32_t argc, char **argv) {
                     std::cout <<" , so far has close to left static obs for " << nObsStaticCount << " times" << std::endl;
                     staticDodgeLeft = false;
                     cur_reachEndState.reachLeft = false;
+
+                    // Set variables back
+                    {
+                        std::lock_guard<std::mutex> lck(staticObsMutex);
+                        cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
+                        cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
+                        cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
+                        cur_staticObsStruct.cur_reachEndState.reachLeft = cur_reachEndState.reachLeft;
+                    } 
                 }
                 
                 {
@@ -1309,7 +1255,19 @@ int32_t main(int32_t argc, char **argv) {
                     nObsStaticCount += 1;
                     obsStaticStartTime = std::chrono::high_resolution_clock::now();
                     cur_reachEndState.reachRight = true; 
-                    has_InterruptNeedToReDo = true;
+                    has_InterruptNeedToReDo = true;          
+                
+                    // Set variables back
+                    {
+                        std::lock_guard<std::mutex> lck(staticObsMutex);
+                        cur_staticObsStruct.cur_reachEndState.reachRight = cur_reachEndState.reachRight;
+                        cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
+                        cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
+                    } 
+                    {
+                        std::lock_guard<std::mutex> lck(dynamicObsMutex);
+                        cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
+                    } 
                 }
                 {
                     std::lock_guard<std::mutex> lck(suppressMutex);
@@ -1326,95 +1284,27 @@ int32_t main(int32_t argc, char **argv) {
                         cur_suppressStruct.isSupressFrontReaching = true;
                     }              
                 }
-                    
-                // Set variables back
-                {
-                    std::lock_guard<std::mutex> lck(validRangeMutex);
-                    cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                    cur_validRangeStruct.cur_validWay = cur_validWay;
-                    cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                    cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                    cur_validRangeStruct.preFront_togo = preFront_togo;
-                }
-                {
-                    std::lock_guard<std::mutex> lck(staticObsMutex);
-                    cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                    cur_staticObsStruct.time_toMove = time_toMove;
-                    cur_staticObsStruct.cur_preDist = cur_preDist;
-                    cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                    cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                    cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                    cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                    cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                    cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                    cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                    cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                } 
-                {
-                    std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                    cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                    cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                    cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                    cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                    cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                    cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                    cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                    cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                    cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                    cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                    cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                    cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                    cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-                } 
                 continue;
             }
             else if ( right <= safe_endreach_LR_dist ){
                 if ( on_GoTO_MODE == false ){
-                    cur_preDist.right = -1.0f;
+                    cur_preDist.right = -1.0f;    
+                
+                    // Set variables back
+                    {
+                        std::lock_guard<std::mutex> lck(staticObsMutex);
+                        cur_staticObsStruct.cur_preDist.right = cur_preDist.right;
+                    } 
                 }
                 else{
                     if ( cur_preDist.right == -1.0f || cur_preDist.right <= right ){
                         cur_preDist.right = right;
-                        std::cout <<" Record right: "<< cur_preDist.right << std::endl;
+                        std::cout <<" Record right: "<< cur_preDist.right << std::endl;    
                 
                         // Set variables back
                         {
-                            std::lock_guard<std::mutex> lck(validRangeMutex);
-                            cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                            cur_validRangeStruct.cur_validWay = cur_validWay;
-                            cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                            cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                            cur_validRangeStruct.preFront_togo = preFront_togo;
-                        }
-                        {
                             std::lock_guard<std::mutex> lck(staticObsMutex);
-                            cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                            cur_staticObsStruct.time_toMove = time_toMove;
-                            cur_staticObsStruct.cur_preDist = cur_preDist;
-                            cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                            cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                            cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                            cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                            cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                            cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                            cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                            cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                        } 
-                        {
-                            std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                            cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                            cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                            cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                            cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                            cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                            cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                            cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                            cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                            cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                            cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                            cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                            cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                            cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
+                            cur_staticObsStruct.cur_preDist.right = cur_preDist.right;
                         } 
                         continue;
                     }
@@ -1427,53 +1317,25 @@ int32_t main(int32_t argc, char **argv) {
                                 staticDodgeRight = true;
                                 has_possibleInterrupt = true;
                                 obsStaticStartTime = std::chrono::high_resolution_clock::now();
-                                nObsStaticCount += 1;
+                                nObsStaticCount += 1;       
+                
+                                // Set variables back
+                                {
+                                    std::lock_guard<std::mutex> lck(staticObsMutex);
+                                    cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
+                                    cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
+                                    cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
+                                } 
+                                {
+                                    std::lock_guard<std::mutex> lck(dynamicObsMutex);
+                                    cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
+                                } 
                             }
                             {
                                 std::lock_guard<std::mutex> lck(suppressMutex);
                                 cur_suppressStruct.isSupressAll = true;
                             }
                             Goto(od4, - 0.2f * std::sin( cur_state_yaw ), 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
-                
-                            // Set variables back
-                            {
-                                std::lock_guard<std::mutex> lck(validRangeMutex);
-                                cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                                cur_validRangeStruct.cur_validWay = cur_validWay;
-                                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                                cur_validRangeStruct.preFront_togo = preFront_togo;
-                            }
-                            {
-                                std::lock_guard<std::mutex> lck(staticObsMutex);
-                                cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                                cur_staticObsStruct.time_toMove = time_toMove;
-                                cur_staticObsStruct.cur_preDist = cur_preDist;
-                                cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                                cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                                cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                                cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                                cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                                cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                                cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                                cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                            } 
-                            {
-                                std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                                cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                                cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                                cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                                cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                                cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                                cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                                cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                                cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                                cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                                cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-                            } 
                             continue;
                         }
                         else{
@@ -1481,7 +1343,15 @@ int32_t main(int32_t argc, char **argv) {
                             if ( cur_reachEndState.reachRight == false ){
                                 cur_reachEndState.reachRight = true;
                                 obsStaticStartTime = std::chrono::high_resolution_clock::now();
-                                nObsStaticCount += 1;
+                                nObsStaticCount += 1;    
+                
+                                // Set variables back
+                                {
+                                    std::lock_guard<std::mutex> lck(staticObsMutex);
+                                    cur_staticObsStruct.cur_reachEndState.reachRight = cur_reachEndState.reachRight;
+                                    cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
+                                    cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
+                                } 
                             }
                             {
                                 std::lock_guard<std::mutex> lck(suppressMutex);
@@ -1516,7 +1386,16 @@ int32_t main(int32_t argc, char **argv) {
                     std::cout <<" , average right static obs elapsed: " << ObsStaticElapsed / nObsStaticCount << " seconds(s)" << std::endl;
                     std::cout <<" , so far has close to right static obs for " << nObsStaticCount << " times" << std::endl;
                     staticDodgeRight = false;
-                    cur_reachEndState.reachRight = false;
+                    cur_reachEndState.reachRight = false;                      
+                
+                    // Set variables back
+                    {
+                        std::lock_guard<std::mutex> lck(staticObsMutex);
+                        cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
+                        cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
+                        cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
+                        cur_staticObsStruct.cur_reachEndState.reachRight = cur_reachEndState.reachRight;
+                    } 
                 }
 
                 {
@@ -1532,7 +1411,19 @@ int32_t main(int32_t argc, char **argv) {
                     nObsStaticCount += 1;
                     obsStaticStartTime = std::chrono::high_resolution_clock::now();
                     cur_reachEndState.reachRear = true; 
-                    has_InterruptNeedToReDo = true;
+                    has_InterruptNeedToReDo = true;   
+                
+                    // Set variables back
+                    {
+                        std::lock_guard<std::mutex> lck(staticObsMutex);
+                        cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
+                        cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
+                        cur_staticObsStruct.cur_reachEndState.reachRear = cur_reachEndState.reachRear;
+                    } 
+                    {
+                        std::lock_guard<std::mutex> lck(dynamicObsMutex);
+                        cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
+                    } 
                 }
                 {
                     std::lock_guard<std::mutex> lck(suppressMutex);
@@ -1549,46 +1440,6 @@ int32_t main(int32_t argc, char **argv) {
                         cur_suppressStruct.isSupressFrontReaching = true;
                     }            
                 }
-                    
-                // Set variables back
-                {
-                    std::lock_guard<std::mutex> lck(validRangeMutex);
-                    cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                    cur_validRangeStruct.cur_validWay = cur_validWay;
-                    cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                    cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                    cur_validRangeStruct.preFront_togo = preFront_togo;
-                }
-                {
-                    std::lock_guard<std::mutex> lck(staticObsMutex);
-                    cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                    cur_staticObsStruct.time_toMove = time_toMove;
-                    cur_staticObsStruct.cur_preDist = cur_preDist;
-                    cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                    cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                    cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                    cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                    cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                    cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                    cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                    cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                } 
-                {
-                    std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                    cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                    cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                    cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                    cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                    cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                    cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                    cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                    cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                    cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                    cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                    cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                    cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                    cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-                } 
                 continue;
             }
             else if ( rear <= safe_endreach_dist ){
@@ -1599,6 +1450,18 @@ int32_t main(int32_t argc, char **argv) {
                         obsStaticStartTime = std::chrono::high_resolution_clock::now();
                         cur_reachEndState.reachRear = true;
                         on_GoTO_MODE = false;
+                
+                        // Set variables back
+                        {
+                            std::lock_guard<std::mutex> lck(staticObsMutex);
+                            cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
+                            cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
+                            cur_staticObsStruct.cur_reachEndState.reachRear = cur_reachEndState.reachRear;
+                        } 
+                        {
+                            std::lock_guard<std::mutex> lck(validRangeMutex);
+                            cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
+                        } 
                     }
                     {
                         std::lock_guard<std::mutex> lck(suppressMutex);
@@ -1631,6 +1494,14 @@ int32_t main(int32_t argc, char **argv) {
                     std::cout <<" , average rear static obs elapsed: " << ObsStaticElapsed / nObsStaticCount << " seconds(s)" << std::endl;
                     std::cout <<" , so far has close to rear static obs for " << nObsStaticCount << " times" << std::endl;
                     cur_reachEndState.reachRear = false;
+                
+                    // Set variables back
+                    {
+                        std::lock_guard<std::mutex> lck(staticObsMutex);
+                        cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
+                        cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
+                        cur_staticObsStruct.cur_reachEndState.reachRear = cur_reachEndState.reachRear;
+                    } 
                 }
 
                 {
@@ -1639,46 +1510,6 @@ int32_t main(int32_t argc, char **argv) {
                     cur_suppressStruct.isSupressFrontReaching = false;
                 }
             }    
-                
-            // Set variables back
-            {
-                std::lock_guard<std::mutex> lck(validRangeMutex);
-                cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                cur_validRangeStruct.cur_validWay = cur_validWay;
-                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                cur_validRangeStruct.preFront_togo = preFront_togo;
-            }
-            {
-                std::lock_guard<std::mutex> lck(staticObsMutex);
-                cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                cur_staticObsStruct.time_toMove = time_toMove;
-                cur_staticObsStruct.cur_preDist = cur_preDist;
-                cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-            } 
-            {
-                std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-            } 
         }        
     });
 
@@ -1839,6 +1670,11 @@ int32_t main(int32_t argc, char **argv) {
                         cur_suppressStruct.isSupressFrontReaching = true;
                         cur_suppressStruct.isSupressLookAround = true;
                     }
+                    {
+                        std::lock_guard<std::mutex> lck(dynamicObsMutex);
+                        cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
+                        cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
+                    }
                 }
 
                 if ( dist_obs * std::cos( aimDirection_obs ) <= 135.0f ){    
@@ -1852,47 +1688,18 @@ int32_t main(int32_t argc, char **argv) {
                             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
                             dodgeDist += 0.2f;
                             on_GoTO_MODE = false;
-                            cur_dodgeType = DODGE_LEFT;
+                            cur_dodgeType = DODGE_LEFT;                            
                             
                             // Set variables back
                             {
-                                std::lock_guard<std::mutex> lck(validRangeMutex);
-                                cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                                cur_validRangeStruct.cur_validWay = cur_validWay;
-                                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                                cur_validRangeStruct.preFront_togo = preFront_togo;
-                            }
-                            {
-                                std::lock_guard<std::mutex> lck(staticObsMutex);
-                                cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                                cur_staticObsStruct.time_toMove = time_toMove;
-                                cur_staticObsStruct.cur_preDist = cur_preDist;
-                                cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                                cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                                cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                                cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                                cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                                cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                                cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                                cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                            } 
-                            {
                                 std::lock_guard<std::mutex> lck(dynamicObsMutex);
                                 cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                                cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
                                 cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                                cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                                cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                                cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                                cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                                cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                                cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                                cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-                            }  
+                            }
+                            {
+                                std::lock_guard<std::mutex> lck(validRangeMutex);
+                                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
+                            }
                             continue;
                         }
                         else if ( cur_validWay.toRear >= safe_endreach_LR_dist + 0.2f && has_dodgeToRear == false ){
@@ -1911,42 +1718,19 @@ int32_t main(int32_t argc, char **argv) {
 
                             // Set variables back
                             {
-                                std::lock_guard<std::mutex> lck(validRangeMutex);
-                                cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                                cur_validRangeStruct.cur_validWay = cur_validWay;
-                                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                                cur_validRangeStruct.preFront_togo = preFront_togo;
-                            }
-                            {
                                 std::lock_guard<std::mutex> lck(staticObsMutex);
                                 cur_staticObsStruct.cur_distToMove = cur_distToMove;
                                 cur_staticObsStruct.time_toMove = time_toMove;
-                                cur_staticObsStruct.cur_preDist = cur_preDist;
-                                cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                                cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                                cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                                cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                                cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                                cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                                cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                                cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
                             } 
                             {
+                                std::lock_guard<std::mutex> lck(validRangeMutex);
+                                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
+                            }
+                            {
                                 std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                                cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                                cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
                                 cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                                cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                                cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                                cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
+                                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
                                 cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                                cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                                cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                                cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                                cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
                             }  
                             continue;
                         }
@@ -1955,6 +1739,16 @@ int32_t main(int32_t argc, char **argv) {
                             std::cout <<" No where to go but stop current action..." << std::endl;
                             on_GoTO_MODE = false;
                             cur_dodgeType = DODGE_STOP;
+
+                            // Set variables back
+                            {
+                                std::lock_guard<std::mutex> lck(validRangeMutex);
+                                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
+                            }
+                            {
+                                std::lock_guard<std::mutex> lck(dynamicObsMutex);
+                                cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
+                            } 
                         }
                     }
                     else{
@@ -1966,47 +1760,18 @@ int32_t main(int32_t argc, char **argv) {
                             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
                             dodgeDist -= 0.2f;
                             on_GoTO_MODE = false;
-                            cur_dodgeType = DODGE_RIGHT;
-
+                            cur_dodgeType = DODGE_RIGHT;                         
+                            
                             // Set variables back
-                            {
-                                std::lock_guard<std::mutex> lck(validRangeMutex);
-                                cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                                cur_validRangeStruct.cur_validWay = cur_validWay;
-                                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                                cur_validRangeStruct.preFront_togo = preFront_togo;
-                            }
-                            {
-                                std::lock_guard<std::mutex> lck(staticObsMutex);
-                                cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                                cur_staticObsStruct.time_toMove = time_toMove;
-                                cur_staticObsStruct.cur_preDist = cur_preDist;
-                                cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                                cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                                cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                                cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                                cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                                cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                                cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                                cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                            } 
                             {
                                 std::lock_guard<std::mutex> lck(dynamicObsMutex);
                                 cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                                cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
                                 cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                                cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                                cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                                cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                                cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                                cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                                cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                                cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-                            }  
+                            }
+                            {
+                                std::lock_guard<std::mutex> lck(validRangeMutex);
+                                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
+                            }
                             continue;
                         }
                         else if ( cur_validWay.toRear >= safe_endreach_LR_dist + 0.2f && has_dodgeToRear == false ){
@@ -2025,42 +1790,19 @@ int32_t main(int32_t argc, char **argv) {
 
                             // Set variables back
                             {
-                                std::lock_guard<std::mutex> lck(validRangeMutex);
-                                cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                                cur_validRangeStruct.cur_validWay = cur_validWay;
-                                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                                cur_validRangeStruct.preFront_togo = preFront_togo;
-                            }
-                            {
                                 std::lock_guard<std::mutex> lck(staticObsMutex);
                                 cur_staticObsStruct.cur_distToMove = cur_distToMove;
                                 cur_staticObsStruct.time_toMove = time_toMove;
-                                cur_staticObsStruct.cur_preDist = cur_preDist;
-                                cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                                cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                                cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                                cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                                cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                                cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                                cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                                cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
                             } 
                             {
+                                std::lock_guard<std::mutex> lck(validRangeMutex);
+                                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
+                            }
+                            {
                                 std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                                cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                                cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
                                 cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                                cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                                cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                                cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
+                                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
                                 cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                                cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                                cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                                cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                                cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
                             }  
                             continue;
                         }
@@ -2069,6 +1811,16 @@ int32_t main(int32_t argc, char **argv) {
                             std::cout <<" No where to go but stop current action..." << std::endl;
                             on_GoTO_MODE = false;
                             cur_dodgeType = DODGE_STOP;
+
+                            // Set variables back
+                            {
+                                std::lock_guard<std::mutex> lck(validRangeMutex);
+                                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
+                            }
+                            {
+                                std::lock_guard<std::mutex> lck(dynamicObsMutex);
+                                cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
+                            } 
                         }
                     }
                 }
@@ -2082,42 +1834,10 @@ int32_t main(int32_t argc, char **argv) {
 
                     // Set variables back
                     {
-                        std::lock_guard<std::mutex> lck(validRangeMutex);
-                        cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                        cur_validRangeStruct.cur_validWay = cur_validWay;
-                        cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                        cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                        cur_validRangeStruct.preFront_togo = preFront_togo;
-                    }
-                    {
-                        std::lock_guard<std::mutex> lck(staticObsMutex);
-                        cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                        cur_staticObsStruct.time_toMove = time_toMove;
-                        cur_staticObsStruct.cur_preDist = cur_preDist;
-                        cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                        cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                        cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                        cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                        cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                        cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                        cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                        cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                    } 
-                    {
                         std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                        cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                        cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                        cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
+                        cur_dynamicObsStruct.cur_obsState.dist_obs = cur_obsState.dist_obs;
+                        cur_dynamicObsStruct.cur_obsState.aimDirection_obs = cur_obsState.aimDirection_obs;
                         cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                        cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                        cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                        cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                        cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                        cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                        cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                        cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                        cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                        cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
                     }  
                     continue;
                 }
@@ -2158,41 +1878,12 @@ int32_t main(int32_t argc, char **argv) {
                             // Set variables back
                             {
                                 std::lock_guard<std::mutex> lck(validRangeMutex);
-                                cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                                cur_validRangeStruct.cur_validWay = cur_validWay;
                                 cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                                cur_validRangeStruct.preFront_togo = preFront_togo;
                             }
-                            {
-                                std::lock_guard<std::mutex> lck(staticObsMutex);
-                                cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                                cur_staticObsStruct.time_toMove = time_toMove;
-                                cur_staticObsStruct.cur_preDist = cur_preDist;
-                                cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                                cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                                cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                                cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                                cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                                cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                                cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                                cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                            } 
                             {
                                 std::lock_guard<std::mutex> lck(dynamicObsMutex);
                                 cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                                cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
                                 cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                                cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                                cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                                cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                                cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                                cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                                cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                                cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
                             }  
                             continue;
                         }
@@ -2212,42 +1903,19 @@ int32_t main(int32_t argc, char **argv) {
 
                             // Set variables back
                             {
-                                std::lock_guard<std::mutex> lck(validRangeMutex);
-                                cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                                cur_validRangeStruct.cur_validWay = cur_validWay;
-                                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                                cur_validRangeStruct.preFront_togo = preFront_togo;
-                            }
-                            {
                                 std::lock_guard<std::mutex> lck(staticObsMutex);
                                 cur_staticObsStruct.cur_distToMove = cur_distToMove;
                                 cur_staticObsStruct.time_toMove = time_toMove;
-                                cur_staticObsStruct.cur_preDist = cur_preDist;
-                                cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                                cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                                cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                                cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                                cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                                cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                                cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                                cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
                             } 
                             {
+                                std::lock_guard<std::mutex> lck(validRangeMutex);
+                                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
+                            }
+                            {
                                 std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                                cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                                cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
                                 cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                                cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                                cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                                cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
+                                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
                                 cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                                cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                                cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                                cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                                cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
                             }  
                             continue;
                         }
@@ -2260,41 +1928,11 @@ int32_t main(int32_t argc, char **argv) {
                             // Set variables back
                             {
                                 std::lock_guard<std::mutex> lck(validRangeMutex);
-                                cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                                cur_validRangeStruct.cur_validWay = cur_validWay;
                                 cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                                cur_validRangeStruct.preFront_togo = preFront_togo;
                             }
                             {
-                                std::lock_guard<std::mutex> lck(staticObsMutex);
-                                cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                                cur_staticObsStruct.time_toMove = time_toMove;
-                                cur_staticObsStruct.cur_preDist = cur_preDist;
-                                cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                                cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                                cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                                cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                                cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                                cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                                cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                                cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                            } 
-                            {
                                 std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                                cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                                cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
                                 cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                                cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                                cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                                cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                                cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                                cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                                cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                                cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
                             }  
                             continue;
                         }
@@ -2313,41 +1951,12 @@ int32_t main(int32_t argc, char **argv) {
                             // Set variables back
                             {
                                 std::lock_guard<std::mutex> lck(validRangeMutex);
-                                cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                                cur_validRangeStruct.cur_validWay = cur_validWay;
                                 cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                                cur_validRangeStruct.preFront_togo = preFront_togo;
                             }
-                            {
-                                std::lock_guard<std::mutex> lck(staticObsMutex);
-                                cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                                cur_staticObsStruct.time_toMove = time_toMove;
-                                cur_staticObsStruct.cur_preDist = cur_preDist;
-                                cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                                cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                                cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                                cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                                cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                                cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                                cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                                cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                            } 
                             {
                                 std::lock_guard<std::mutex> lck(dynamicObsMutex);
                                 cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                                cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
                                 cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                                cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                                cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                                cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                                cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                                cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                                cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                                cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
                             }  
                             continue;
                         }
@@ -2367,42 +1976,19 @@ int32_t main(int32_t argc, char **argv) {
 
                             // Set variables back
                             {
-                                std::lock_guard<std::mutex> lck(validRangeMutex);
-                                cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                                cur_validRangeStruct.cur_validWay = cur_validWay;
-                                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                                cur_validRangeStruct.preFront_togo = preFront_togo;
-                            }
-                            {
                                 std::lock_guard<std::mutex> lck(staticObsMutex);
                                 cur_staticObsStruct.cur_distToMove = cur_distToMove;
                                 cur_staticObsStruct.time_toMove = time_toMove;
-                                cur_staticObsStruct.cur_preDist = cur_preDist;
-                                cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                                cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                                cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                                cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                                cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                                cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                                cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                                cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
                             } 
                             {
+                                std::lock_guard<std::mutex> lck(validRangeMutex);
+                                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
+                            }
+                            {
                                 std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                                cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                                cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
                                 cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                                cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                                cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                                cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
+                                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
                                 cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                                cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                                cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                                cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                                cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
                             }  
                             continue;
                         }
@@ -2415,41 +2001,11 @@ int32_t main(int32_t argc, char **argv) {
                             // Set variables back
                             {
                                 std::lock_guard<std::mutex> lck(validRangeMutex);
-                                cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                                cur_validRangeStruct.cur_validWay = cur_validWay;
                                 cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                                cur_validRangeStruct.preFront_togo = preFront_togo;
                             }
                             {
-                                std::lock_guard<std::mutex> lck(staticObsMutex);
-                                cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                                cur_staticObsStruct.time_toMove = time_toMove;
-                                cur_staticObsStruct.cur_preDist = cur_preDist;
-                                cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                                cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                                cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                                cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                                cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                                cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                                cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                                cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                            } 
-                            {
                                 std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                                cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                                cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
                                 cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                                cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                                cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                                cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                                cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                                cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                                cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                                cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
                             }  
                             continue;
                         }
@@ -2459,6 +2015,11 @@ int32_t main(int32_t argc, char **argv) {
                 // Record current dist and aimDirection for later use
                 cur_obsState.dist_obs = dist_obs;
                 cur_obsState.aimDirection_obs = aimDirection_obs;
+                {
+                    std::lock_guard<std::mutex> lck(dynamicObsMutex);
+                    cur_dynamicObsStruct.cur_obsState.dist_obs = cur_obsState.dist_obs;
+                    cur_dynamicObsStruct.cur_obsState.aimDirection_obs = cur_obsState.aimDirection_obs;
+                } 
             }
             else if ( cur_dodgeType != DODGE_NONE ){
                 // Go back to the original position while the obstacle is gone
@@ -2504,47 +2065,22 @@ int32_t main(int32_t argc, char **argv) {
                 ObsDynamicElapsed += elapsed.count();
                 std::cout <<" , average dynamic obs elapsed: " << ObsDynamicElapsed / nObsDynamicCount << " seconds(s)" << std::endl;
                 std::cout <<" , so far has close to dynamic obs for " << nObsDynamicCount << " times" << std::endl;
-            }   
             
-            // Set variables back
-            {
-                std::lock_guard<std::mutex> lck(validRangeMutex);
-                cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                cur_validRangeStruct.cur_validWay = cur_validWay;
-                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                cur_validRangeStruct.preFront_togo = preFront_togo;
-            }
-            {
-                std::lock_guard<std::mutex> lck(staticObsMutex);
-                cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                cur_staticObsStruct.time_toMove = time_toMove;
-                cur_staticObsStruct.cur_preDist = cur_preDist;
-                cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-            } 
-            {
-                std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-            }    
+                // Set variables back
+                {
+                    std::lock_guard<std::mutex> lck(validRangeMutex);
+                    cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
+                }
+                {
+                    std::lock_guard<std::mutex> lck(dynamicObsMutex);
+                    cur_dynamicObsStruct.dodgeDist = dodgeDist;
+                    cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
+                    cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
+                    cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
+                    cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
+                    cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
+                }    
+            }   
         }        
     });
 
@@ -2790,6 +2326,21 @@ int32_t main(int32_t argc, char **argv) {
                     std::cout <<" Interrupted after: " << elapsed.count() << "seconds(s)" << std::endl;
                     TargetFindingElapsed += elapsed.count();
                     //  targetFindingStartTime = std::chrono::high_resolution_clock::now();
+                    {
+                        std::lock_guard<std::mutex> lck(targetFindingMutex);
+                        cur_targetFindingStruct.cur_targetCheckState.aimTurnStarted = cur_targetCheckState.aimTurnStarted;
+                        cur_targetFindingStruct.cur_targetCheckState.turnStarted = cur_targetCheckState.turnStarted;   
+                        cur_targetFindingStruct.TargetFindingElapsed = TargetFindingElapsed;
+                    }
+                    {
+                        std::lock_guard<std::mutex> lck(validRangeMutex);
+                        cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
+                    }
+                    {
+                        std::lock_guard<std::mutex> lck(dynamicObsMutex);
+                        cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
+                        cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
+                    }
                 }
             }
 
@@ -2812,6 +2363,13 @@ int32_t main(int32_t argc, char **argv) {
                     std::cout <<" Interrupted after: " << elapsed.count() << "seconds(s)" << std::endl;
                     LookAroundElapsed += elapsed.count();
                     //  lookAroundStartTime = std::chrono::high_resolution_clock::now();
+                    {
+                        std::lock_guard<std::mutex> lck(lookAroundMutex);
+                        cur_lookAroundStruct.cur_lookAroundState.turnStarted = cur_lookAroundState.turnStarted;
+                        cur_lookAroundStruct.cur_lookAroundState.clearPathCheckStarted = cur_lookAroundState.clearPathCheckStarted;
+                        cur_lookAroundStruct.cur_lookAroundState.nTimer = cur_lookAroundState.nTimer;
+                        cur_lookAroundStruct.LookAroundElapsed = LookAroundElapsed;
+                    }
                 }
 
                 // Reset flag if the front reaching started
@@ -2831,6 +2389,16 @@ int32_t main(int32_t argc, char **argv) {
                     std::cout <<" Interrupted after: " << elapsed.count() << "seconds(s)" << std::endl;
                     FrontReachingElapsed += elapsed.count();
                     //  frontReachingStartTime = std::chrono::high_resolution_clock::now();
+                    {
+                        std::lock_guard<std::mutex> lck(frontReachingMutex);
+                        cur_frontReachingStruct.cur_pathReachingState.pathReadyToGo = cur_pathReachingState.pathReadyToGo;
+                        cur_frontReachingStruct.cur_pathReachingState.pathOnGoing = cur_pathReachingState.pathOnGoing;
+                        cur_frontReachingStruct.FrontReachingElapsed = FrontReachingElapsed;
+                    }
+                    {
+                        std::lock_guard<std::mutex> lck(validRangeMutex);
+                        cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
+                    }
                 }
             }
 
@@ -2842,7 +2410,7 @@ int32_t main(int32_t argc, char **argv) {
                     nTargetFindingCount += 1;
                     std::cout <<" Find target start turning..." << std::endl;   
                     {
-                        std::lock_guard<std::mutex> lck(targetFindingMutex);
+                        std::lock_guard<std::mutex> lck(suppressMutex);
                         cur_suppressStruct.isSupressFrontReaching = true;
                         cur_suppressStruct.isSupressLookAround= true;
                     }
@@ -2869,71 +2437,17 @@ int32_t main(int32_t argc, char **argv) {
                     // Set variables back
                     {
                         std::lock_guard<std::mutex> lck(validRangeMutex);
-                        cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                        cur_validRangeStruct.cur_validWay = cur_validWay;
-                        cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
                         cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                        cur_validRangeStruct.preFront_togo = preFront_togo;
                     }
                     {
-                        std::lock_guard<std::mutex> lck(staticObsMutex);
-                        cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                        cur_staticObsStruct.time_toMove = time_toMove;
-                        cur_staticObsStruct.cur_preDist = cur_preDist;
-                        cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                        cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                        cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                        cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                        cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                        cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                        cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                        cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                    } 
-                    {
-                        std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                        cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                        cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                        cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                        cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                        cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                        cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                        cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                        cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                        cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                        cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                        cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                        cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                        cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-                    }  
-                    {
                         std::lock_guard<std::mutex> lck(targetFindingMutex);
-                        cur_targetFindingStruct.cur_targetCheckState = cur_targetCheckState;
-                        cur_targetFindingStruct.start_turning_angle = start_turning_angle;
-                        cur_targetFindingStruct.dist_to_reach = dist_to_reach;
-                        cur_targetFindingStruct.aimDirection_to_reach = aimDirection_to_reach;
-                        cur_targetFindingStruct.nTargetFindingCount = nTargetFindingCount;
-                        cur_targetFindingStruct.TargetFindingElapsed = TargetFindingElapsed;
                         cur_targetFindingStruct.targetFindingStartTime = targetFindingStartTime;
-                        cur_targetFindingStruct.targetFindingEndTime = targetFindingEndTime;
+                        cur_targetFindingStruct.nTargetFindingCount = nTargetFindingCount;
+                        cur_targetFindingStruct.cur_targetCheckState.ang_toTurn = cur_targetCheckState.ang_toTurn;
+                        cur_targetFindingStruct.cur_targetCheckState.startAngle = cur_targetCheckState.startAngle;
+                        cur_targetFindingStruct.cur_targetCheckState.aimTurnStarted = cur_targetCheckState.aimTurnStarted;
+                        cur_targetFindingStruct.cur_targetCheckState.oriAimDirection = cur_targetCheckState.oriAimDirection;
                     }  
-                    {
-                        std::lock_guard<std::mutex> lck(frontReachingMutex);
-                        cur_frontReachingStruct.cur_pathReachingState = cur_pathReachingState;
-                        cur_frontReachingStruct.nfrontReachingCount = nfrontReachingCount;
-                        cur_frontReachingStruct.FrontReachingElapsed = FrontReachingElapsed;
-                        cur_frontReachingStruct.frontReachingStartTime = frontReachingStartTime;
-                        cur_frontReachingStruct.frontReachingEndTime = frontReachingEndTime;
-                    }  
-                    {
-                        std::lock_guard<std::mutex> lck(lookAroundMutex);
-                        cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
-                        cur_lookAroundStruct.cur_lookAroundState = cur_lookAroundStruct.cur_lookAroundState;
-                        cur_lookAroundStruct.ori_front = cur_lookAroundStruct.ori_front;
-                        cur_lookAroundStruct.nlookAroundCount = cur_lookAroundStruct.nlookAroundCount;
-                        cur_lookAroundStruct.LookAroundElapsed = cur_lookAroundStruct.LookAroundElapsed;
-                        cur_lookAroundStruct.lookAroundStartTime = lookAroundStartTime;
-                        cur_lookAroundStruct.lookAroundEndTime = lookAroundEndTime;
-                    }   
                     continue;
                 }
                 else if ( cur_targetCheckState.turnStarted == false ){
@@ -2969,7 +2483,7 @@ int32_t main(int32_t argc, char **argv) {
                             //  TargetFindingElapsed += elapsed.count();
                             targetFindingStartTime = std::chrono::high_resolution_clock::now(); 
                             {
-                                std::lock_guard<std::mutex> lck(targetFindingMutex);
+                                std::lock_guard<std::mutex> lck(suppressMutex);
                                 cur_suppressStruct.isSupressFrontReaching = true;
                                 cur_suppressStruct.isSupressLookAround= true;
                             }
@@ -2988,7 +2502,25 @@ int32_t main(int32_t argc, char **argv) {
                                 Goto(od4, 0.0f, 0.0f, 0.0f, angTurn - 10.0f / 180.0f * M_PI, 2);          
                             } 
                             on_TURNING_MODE = true;
-                            cur_targetCheckState.oriAimDirection =  aimDirection_to_reach;
+                            cur_targetCheckState.oriAimDirection = aimDirection_to_reach;
+
+                            // Set variables back
+                            {
+                                std::lock_guard<std::mutex> lck(dynamicObsMutex);
+                                cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
+                                cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
+                            }
+                            {
+                                std::lock_guard<std::mutex> lck(targetFindingMutex);
+                                cur_targetFindingStruct.targetFindingStartTime = targetFindingStartTime;
+                                cur_targetFindingStruct.cur_targetCheckState.ang_toTurn = cur_targetCheckState.ang_toTurn;
+                                cur_targetFindingStruct.cur_targetCheckState.startAngle = cur_targetCheckState.startAngle;
+                                cur_targetFindingStruct.cur_targetCheckState.oriAimDirection = cur_targetCheckState.oriAimDirection;
+                            }  
+                            {
+                                std::lock_guard<std::mutex> lck(validRangeMutex);
+                                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
+                            }
                         }
 
                         // Record the angle and front                    
@@ -3015,6 +2547,15 @@ int32_t main(int32_t argc, char **argv) {
                             cur_targetCheckState.targetAngle = cur_state_yaw;
                             cur_targetCheckState.cur_aimDiff = std::abs( aimDirection_to_reach );
                             std::cout <<" Current angle: "<< cur_state_yaw << " and aim diff: " << std::abs( aimDirection_to_reach ) << std::endl;   
+                        }
+                        {
+                            std::lock_guard<std::mutex> lck(lookAroundMutex);
+                            cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
+                        }
+                        {
+                            std::lock_guard<std::mutex> lck(targetFindingMutex);
+                            cur_targetFindingStruct.cur_targetCheckState.targetAngle = cur_targetCheckState.targetAngle;
+                            cur_targetFindingStruct.cur_targetCheckState.cur_aimDiff = cur_targetCheckState.cur_aimDiff;
                         }
                     }
                     else{
@@ -3082,72 +2623,10 @@ int32_t main(int32_t argc, char **argv) {
 
                     // Set variables back
                     {
-                        std::lock_guard<std::mutex> lck(validRangeMutex);
-                        cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                        cur_validRangeStruct.cur_validWay = cur_validWay;
-                        cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                        cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                        cur_validRangeStruct.preFront_togo = preFront_togo;
-                    }
-                    {
-                        std::lock_guard<std::mutex> lck(staticObsMutex);
-                        cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                        cur_staticObsStruct.time_toMove = time_toMove;
-                        cur_staticObsStruct.cur_preDist = cur_preDist;
-                        cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                        cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                        cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                        cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                        cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                        cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                        cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                        cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                    } 
-                    {
-                        std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                        cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                        cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                        cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                        cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                        cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                        cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                        cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                        cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                        cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                        cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                        cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                        cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                        cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-                    }  
-                    {
                         std::lock_guard<std::mutex> lck(targetFindingMutex);
-                        cur_targetFindingStruct.cur_targetCheckState = cur_targetCheckState;
-                        cur_targetFindingStruct.start_turning_angle = start_turning_angle;
-                        cur_targetFindingStruct.dist_to_reach = dist_to_reach;
-                        cur_targetFindingStruct.aimDirection_to_reach = aimDirection_to_reach;
-                        cur_targetFindingStruct.nTargetFindingCount = nTargetFindingCount;
-                        cur_targetFindingStruct.TargetFindingElapsed = TargetFindingElapsed;
-                        cur_targetFindingStruct.targetFindingStartTime = targetFindingStartTime;
-                        cur_targetFindingStruct.targetFindingEndTime = targetFindingEndTime;
+                        cur_targetFindingStruct.cur_targetCheckState.targetAngle = cur_targetCheckState.targetAngle;
+                        cur_targetFindingStruct.cur_targetCheckState.turnStarted = cur_targetCheckState.turnStarted;
                     }  
-                    {
-                        std::lock_guard<std::mutex> lck(frontReachingMutex);
-                        cur_frontReachingStruct.cur_pathReachingState = cur_pathReachingState;
-                        cur_frontReachingStruct.nfrontReachingCount = nfrontReachingCount;
-                        cur_frontReachingStruct.FrontReachingElapsed = FrontReachingElapsed;
-                        cur_frontReachingStruct.frontReachingStartTime = frontReachingStartTime;
-                        cur_frontReachingStruct.frontReachingEndTime = frontReachingEndTime;
-                    }  
-                    {
-                        std::lock_guard<std::mutex> lck(lookAroundMutex);
-                        cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
-                        cur_lookAroundStruct.cur_lookAroundState = cur_lookAroundStruct.cur_lookAroundState;
-                        cur_lookAroundStruct.ori_front = cur_lookAroundStruct.ori_front;
-                        cur_lookAroundStruct.nlookAroundCount = cur_lookAroundStruct.nlookAroundCount;
-                        cur_lookAroundStruct.LookAroundElapsed = cur_lookAroundStruct.LookAroundElapsed;
-                        cur_lookAroundStruct.lookAroundStartTime = lookAroundStartTime;
-                        cur_lookAroundStruct.lookAroundEndTime = lookAroundEndTime;
-                    }   
                     continue;
                 }
                 else{
@@ -3188,7 +2667,7 @@ int32_t main(int32_t argc, char **argv) {
                             //  TargetFindingElapsed += elapsed.count();
                             targetFindingStartTime = std::chrono::high_resolution_clock::now();
                             {
-                                std::lock_guard<std::mutex> lck(targetFindingMutex);
+                                std::lock_guard<std::mutex> lck(suppressMutex);
                                 cur_suppressStruct.isSupressFrontReaching = true;
                                 cur_suppressStruct.isSupressLookAround= true;
                             }
@@ -3198,79 +2677,25 @@ int32_t main(int32_t argc, char **argv) {
                                 angTurn -= 10.0f / 180.0f * M_PI;
                             }
                             Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 1); 
-                            on_TURNING_MODE = true;
-                        }
-                        
+                            on_TURNING_MODE = true; 
+                            
+                            // Set variables back
+                            {
+                                std::lock_guard<std::mutex> lck(dynamicObsMutex);
+                                cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
+                                cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
+                            }  
+                            {
+                                std::lock_guard<std::mutex> lck(targetFindingMutex);
+                                cur_targetFindingStruct.targetFindingStartTime = targetFindingStartTime;
+                            }  
+                            {
+                                std::lock_guard<std::mutex> lck(validRangeMutex);
+                                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
+                            }
+                        }                        
                         // continue turning
-                        //  std::cout <<" Keep turning with angle diff: " << angleDifference( cur_state_yaw, cur_targetCheckState.targetAngle ) << ", with current angle: " << cur_state_yaw << std::endl; 
-                        // Set variables back
-                        {
-                            std::lock_guard<std::mutex> lck(validRangeMutex);
-                            cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                            cur_validRangeStruct.cur_validWay = cur_validWay;
-                            cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                            cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                            cur_validRangeStruct.preFront_togo = preFront_togo;
-                        }
-                        {
-                            std::lock_guard<std::mutex> lck(staticObsMutex);
-                            cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                            cur_staticObsStruct.time_toMove = time_toMove;
-                            cur_staticObsStruct.cur_preDist = cur_preDist;
-                            cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                            cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                            cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                            cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                            cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                            cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                            cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                            cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                        } 
-                        {
-                            std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                            cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                            cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                            cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                            cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                            cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                            cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                            cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                            cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                            cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                            cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                            cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                            cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                            cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-                        }  
-                        {
-                            std::lock_guard<std::mutex> lck(targetFindingMutex);
-                            cur_targetFindingStruct.cur_targetCheckState = cur_targetCheckState;
-                            cur_targetFindingStruct.start_turning_angle = start_turning_angle;
-                            cur_targetFindingStruct.dist_to_reach = dist_to_reach;
-                            cur_targetFindingStruct.aimDirection_to_reach = aimDirection_to_reach;
-                            cur_targetFindingStruct.nTargetFindingCount = nTargetFindingCount;
-                            cur_targetFindingStruct.TargetFindingElapsed = TargetFindingElapsed;
-                            cur_targetFindingStruct.targetFindingStartTime = targetFindingStartTime;
-                            cur_targetFindingStruct.targetFindingEndTime = targetFindingEndTime;
-                        }  
-                        {
-                            std::lock_guard<std::mutex> lck(frontReachingMutex);
-                            cur_frontReachingStruct.cur_pathReachingState = cur_pathReachingState;
-                            cur_frontReachingStruct.nfrontReachingCount = nfrontReachingCount;
-                            cur_frontReachingStruct.FrontReachingElapsed = FrontReachingElapsed;
-                            cur_frontReachingStruct.frontReachingStartTime = frontReachingStartTime;
-                            cur_frontReachingStruct.frontReachingEndTime = frontReachingEndTime;
-                        }  
-                        {
-                            std::lock_guard<std::mutex> lck(lookAroundMutex);
-                            cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
-                            cur_lookAroundStruct.cur_lookAroundState = cur_lookAroundStruct.cur_lookAroundState;
-                            cur_lookAroundStruct.ori_front = cur_lookAroundStruct.ori_front;
-                            cur_lookAroundStruct.nlookAroundCount = cur_lookAroundStruct.nlookAroundCount;
-                            cur_lookAroundStruct.LookAroundElapsed = cur_lookAroundStruct.LookAroundElapsed;
-                            cur_lookAroundStruct.lookAroundStartTime = lookAroundStartTime;
-                            cur_lookAroundStruct.lookAroundEndTime = lookAroundEndTime;
-                        }   
+                        //  std::cout <<" Keep turning with angle diff: " << angleDifference( cur_state_yaw, cur_targetCheckState.targetAngle ) << ", with current angle: " << cur_state_yaw << std::endl;  
                         continue;
                     }
                     else{ 
@@ -3286,6 +2711,10 @@ int32_t main(int32_t argc, char **argv) {
                             state.front = front;
                             state.angle = wrap_angle(yaw);
                             angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
+                            {
+                                std::lock_guard<std::mutex> lck(lookAroundMutex);
+                                cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
+                            }   
 
                             // Start to find another way to go to
                             // Check for clear path
@@ -3336,71 +2765,8 @@ int32_t main(int32_t argc, char **argv) {
                             if ( hasObOnPath == false ){
                                 // Set variables back
                                 {
-                                    std::lock_guard<std::mutex> lck(validRangeMutex);
-                                    cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                                    cur_validRangeStruct.cur_validWay = cur_validWay;
-                                    cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                                    cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                                    cur_validRangeStruct.preFront_togo = preFront_togo;
-                                }
-                                {
-                                    std::lock_guard<std::mutex> lck(staticObsMutex);
-                                    cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                                    cur_staticObsStruct.time_toMove = time_toMove;
-                                    cur_staticObsStruct.cur_preDist = cur_preDist;
-                                    cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                                    cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                                    cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                                    cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                                    cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                                    cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                                    cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                                    cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                                } 
-                                {
-                                    std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                                    cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                                    cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                                    cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                                    cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                                    cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                                    cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                                    cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                                    cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                                    cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                                    cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                                    cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                                    cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                                    cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-                                }  
-                                {
                                     std::lock_guard<std::mutex> lck(targetFindingMutex);
-                                    cur_targetFindingStruct.cur_targetCheckState = cur_targetCheckState;
-                                    cur_targetFindingStruct.start_turning_angle = start_turning_angle;
-                                    cur_targetFindingStruct.dist_to_reach = dist_to_reach;
-                                    cur_targetFindingStruct.aimDirection_to_reach = aimDirection_to_reach;
-                                    cur_targetFindingStruct.nTargetFindingCount = nTargetFindingCount;
-                                    cur_targetFindingStruct.TargetFindingElapsed = TargetFindingElapsed;
-                                    cur_targetFindingStruct.targetFindingStartTime = targetFindingStartTime;
-                                    cur_targetFindingStruct.targetFindingEndTime = targetFindingEndTime;
-                                }  
-                                {
-                                    std::lock_guard<std::mutex> lck(frontReachingMutex);
-                                    cur_frontReachingStruct.cur_pathReachingState = cur_pathReachingState;
-                                    cur_frontReachingStruct.nfrontReachingCount = nfrontReachingCount;
-                                    cur_frontReachingStruct.FrontReachingElapsed = FrontReachingElapsed;
-                                    cur_frontReachingStruct.frontReachingStartTime = frontReachingStartTime;
-                                    cur_frontReachingStruct.frontReachingEndTime = frontReachingEndTime;
-                                }  
-                                {
-                                    std::lock_guard<std::mutex> lck(lookAroundMutex);
-                                    cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
-                                    cur_lookAroundStruct.cur_lookAroundState = cur_lookAroundStruct.cur_lookAroundState;
-                                    cur_lookAroundStruct.ori_front = cur_lookAroundStruct.ori_front;
-                                    cur_lookAroundStruct.nlookAroundCount = cur_lookAroundStruct.nlookAroundCount;
-                                    cur_lookAroundStruct.LookAroundElapsed = cur_lookAroundStruct.LookAroundElapsed;
-                                    cur_lookAroundStruct.lookAroundStartTime = lookAroundStartTime;
-                                    cur_lookAroundStruct.lookAroundEndTime = lookAroundEndTime;
+                                    cur_targetFindingStruct.cur_targetCheckState.targetAngle = cur_targetCheckState.targetAngle;
                                 }   
                                 continue;      
                             }        
@@ -3415,6 +2781,18 @@ int32_t main(int32_t argc, char **argv) {
                             cur_pathReachingState.pathReadyToGo = true;
                             cur_targetCheckState.pointToTarget = true;
                             ori_front = front;
+                            {
+                                std::lock_guard<std::mutex> lck(frontReachingMutex);
+                                cur_frontReachingStruct.cur_pathReachingState.pathReadyToGo = cur_pathReachingState.pathReadyToGo;
+                            }  
+                            {
+                                std::lock_guard<std::mutex> lck(targetFindingMutex);
+                                cur_targetFindingStruct.cur_targetCheckState.pointToTarget = cur_targetCheckState.pointToTarget;
+                            }  
+                            {
+                                std::lock_guard<std::mutex> lck(lookAroundMutex);
+                                cur_lookAroundStruct.ori_front = cur_lookAroundStruct.ori_front;
+                            } 
                         }
                         else{
                             std::cout <<" Can not find goable direction, restart look around..." << std::endl;
@@ -3426,7 +2804,7 @@ int32_t main(int32_t argc, char **argv) {
                         on_TURNING_MODE = false;
                          
                         {
-                            std::lock_guard<std::mutex> lck(targetFindingMutex);
+                            std::lock_guard<std::mutex> lck(suppressMutex);
                             cur_suppressStruct.isSupressFrontReaching = false;
                             cur_suppressStruct.isSupressLookAround= false;
                         }
@@ -3448,148 +2826,24 @@ int32_t main(int32_t argc, char **argv) {
                         TargetFindingElapsed += elapsed.count();
                         std::cout <<" , average target finding elapsed: " << TargetFindingElapsed / nTargetFindingCount << " seconds(s)" << std::endl;
                         std::cout <<" , so far has done target finding for " << nTargetFindingCount << " times" << std::endl;
-                    }
+                        
+                        // Set variables back
+                        {
+                            std::lock_guard<std::mutex> lck(targetFindingMutex);
+                            cur_targetFindingStruct.cur_targetCheckState.aimTurnStarted = cur_targetCheckState.aimTurnStarted;
+                            cur_targetFindingStruct.cur_targetCheckState.turnStarted = cur_targetCheckState.turnStarted;
+                            cur_targetFindingStruct.targetFindingEndTime = targetFindingEndTime;
+                            cur_targetFindingStruct.TargetFindingElapsed = TargetFindingElapsed;
+                        }  
 
-                    // Set variables back
-                    {
-                        std::lock_guard<std::mutex> lck(validRangeMutex);
-                        cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                        cur_validRangeStruct.cur_validWay = cur_validWay;
-                        cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                        cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                        cur_validRangeStruct.preFront_togo = preFront_togo;
-                    }
-                    {
-                        std::lock_guard<std::mutex> lck(staticObsMutex);
-                        cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                        cur_staticObsStruct.time_toMove = time_toMove;
-                        cur_staticObsStruct.cur_preDist = cur_preDist;
-                        cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                        cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                        cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                        cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                        cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                        cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                        cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                        cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                    } 
-                    {
-                        std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                        cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                        cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                        cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                        cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                        cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                        cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                        cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                        cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                        cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                        cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                        cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                        cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                        cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-                    }  
-                    {
-                        std::lock_guard<std::mutex> lck(targetFindingMutex);
-                        cur_targetFindingStruct.cur_targetCheckState = cur_targetCheckState;
-                        cur_targetFindingStruct.start_turning_angle = start_turning_angle;
-                        cur_targetFindingStruct.dist_to_reach = dist_to_reach;
-                        cur_targetFindingStruct.aimDirection_to_reach = aimDirection_to_reach;
-                        cur_targetFindingStruct.nTargetFindingCount = nTargetFindingCount;
-                        cur_targetFindingStruct.TargetFindingElapsed = TargetFindingElapsed;
-                        cur_targetFindingStruct.targetFindingStartTime = targetFindingStartTime;
-                        cur_targetFindingStruct.targetFindingEndTime = targetFindingEndTime;
-                    }  
-                    {
-                        std::lock_guard<std::mutex> lck(frontReachingMutex);
-                        cur_frontReachingStruct.cur_pathReachingState = cur_pathReachingState;
-                        cur_frontReachingStruct.nfrontReachingCount = nfrontReachingCount;
-                        cur_frontReachingStruct.FrontReachingElapsed = FrontReachingElapsed;
-                        cur_frontReachingStruct.frontReachingStartTime = frontReachingStartTime;
-                        cur_frontReachingStruct.frontReachingEndTime = frontReachingEndTime;
-                    }  
-                    {
-                        std::lock_guard<std::mutex> lck(lookAroundMutex);
-                        cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
-                        cur_lookAroundStruct.cur_lookAroundState = cur_lookAroundStruct.cur_lookAroundState;
-                        cur_lookAroundStruct.ori_front = cur_lookAroundStruct.ori_front;
-                        cur_lookAroundStruct.nlookAroundCount = cur_lookAroundStruct.nlookAroundCount;
-                        cur_lookAroundStruct.LookAroundElapsed = cur_lookAroundStruct.LookAroundElapsed;
-                        cur_lookAroundStruct.lookAroundStartTime = lookAroundStartTime;
-                        cur_lookAroundStruct.lookAroundEndTime = lookAroundEndTime;
-                    }        
+                        {
+                            std::lock_guard<std::mutex> lck(validRangeMutex);
+                            cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
+                        }
+                    }    
                     continue;
                 }
             }
-            
-            // Set variables back
-            {
-                std::lock_guard<std::mutex> lck(validRangeMutex);
-                cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                cur_validRangeStruct.cur_validWay = cur_validWay;
-                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                cur_validRangeStruct.preFront_togo = preFront_togo;
-            }
-            {
-                std::lock_guard<std::mutex> lck(staticObsMutex);
-                cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                cur_staticObsStruct.time_toMove = time_toMove;
-                cur_staticObsStruct.cur_preDist = cur_preDist;
-                cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-            } 
-            {
-                std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-            }  
-            {
-                std::lock_guard<std::mutex> lck(targetFindingMutex);
-                cur_targetFindingStruct.cur_targetCheckState = cur_targetCheckState;
-                cur_targetFindingStruct.start_turning_angle = start_turning_angle;
-                cur_targetFindingStruct.dist_to_reach = dist_to_reach;
-                cur_targetFindingStruct.aimDirection_to_reach = aimDirection_to_reach;
-                cur_targetFindingStruct.nTargetFindingCount = nTargetFindingCount;
-                cur_targetFindingStruct.TargetFindingElapsed = TargetFindingElapsed;
-                cur_targetFindingStruct.targetFindingStartTime = targetFindingStartTime;
-                cur_targetFindingStruct.targetFindingEndTime = targetFindingEndTime;
-            }  
-            {
-                std::lock_guard<std::mutex> lck(frontReachingMutex);
-                cur_frontReachingStruct.cur_pathReachingState = cur_pathReachingState;
-                cur_frontReachingStruct.nfrontReachingCount = nfrontReachingCount;
-                cur_frontReachingStruct.FrontReachingElapsed = FrontReachingElapsed;
-                cur_frontReachingStruct.frontReachingStartTime = frontReachingStartTime;
-                cur_frontReachingStruct.frontReachingEndTime = frontReachingEndTime;
-            }  
-            {
-                std::lock_guard<std::mutex> lck(lookAroundMutex);
-                cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
-                cur_lookAroundStruct.cur_lookAroundState = cur_lookAroundStruct.cur_lookAroundState;
-                cur_lookAroundStruct.ori_front = cur_lookAroundStruct.ori_front;
-                cur_lookAroundStruct.nlookAroundCount = cur_lookAroundStruct.nlookAroundCount;
-                cur_lookAroundStruct.LookAroundElapsed = cur_lookAroundStruct.LookAroundElapsed;
-                cur_lookAroundStruct.lookAroundStartTime = lookAroundStartTime;
-                cur_lookAroundStruct.lookAroundEndTime = lookAroundEndTime;
-            }   
         }        
     });
 
@@ -3819,6 +3073,26 @@ int32_t main(int32_t argc, char **argv) {
                     std::cout <<" Interrupted (due to reach ends) after: " << elapsed.count() << "seconds(s)" << std::endl;
                     FrontReachingElapsed += elapsed.count();
                     //  frontReachingStartTime = std::chrono::high_resolution_clock::now();
+                    // Set variables back
+                    {
+                        std::lock_guard<std::mutex> lck(frontReachingMutex);
+                        cur_frontReachingStruct.cur_pathReachingState.pathReadyToGo = cur_pathReachingState.pathReadyToGo;
+                        cur_frontReachingStruct.cur_pathReachingState.pathOnGoing = cur_pathReachingState.pathOnGoing;
+                        cur_frontReachingStruct.FrontReachingElapsed = FrontReachingElapsed;
+                    }
+                    {
+                        std::lock_guard<std::mutex> lck(targetFindingMutex);
+                        cur_targetFindingStruct.cur_targetCheckState.pointToTarget = cur_targetCheckState.pointToTarget;
+                        cur_targetFindingStruct.cur_targetCheckState.cur_aimDiff = cur_targetCheckState.cur_aimDiff;
+                    }
+                    {
+                        std::lock_guard<std::mutex> lck(lookAroundMutex);
+                        cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
+                    }
+                    {
+                        std::lock_guard<std::mutex> lck(validRangeMutex);
+                        cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
+                    }
                 }
             }
 
@@ -3862,6 +3136,21 @@ int32_t main(int32_t argc, char **argv) {
 
                     // Restart the timer again             
                     frontReachingStartTime = std::chrono::high_resolution_clock::now(); 
+
+                    // Set variables back
+                    {
+                        std::lock_guard<std::mutex> lck(frontReachingMutex);
+                        cur_frontReachingStruct.cur_pathReachingState.pathOnGoing = cur_pathReachingState.pathOnGoing;
+                        cur_frontReachingStruct.FrontReachingElapsed = FrontReachingElapsed;
+                        cur_frontReachingStruct.frontReachingStartTime = frontReachingStartTime;
+                    }
+                    {
+                        std::lock_guard<std::mutex> lck(dynamicObsMutex);
+                        cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
+                        cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
+                        cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
+                        cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
+                    }
                 }
             }
 
@@ -3882,17 +3171,35 @@ int32_t main(int32_t argc, char **argv) {
                     else
                         time_toMove = 5;
                     if ( cur_targetCheckState.pointToTarget ){
-                    cur_distToMove = 0.7f;
-                    time_toMove = 2;
-                    if ( front < 0.7f){
-                        cur_distToMove = front - safe_endreach_dist / 2.0f;
-                        time_toMove = 5;
-                    }
+                        cur_distToMove = 0.7f;
+                        time_toMove = 2;
+                        if ( front < 0.7f){
+                            cur_distToMove = front - safe_endreach_dist / 2.0f;
+                            time_toMove = 5;
+                        }
                     }
                     Goto(od4, cur_distToMove * std::cos( cur_state_yaw ), cur_distToMove * std::sin( cur_state_yaw ), 0.0f, 0.0f, time_toMove);
                     cur_pathReachingState.pathOnGoing = true;
                     cur_pathReachingState.startFront = front;
                     on_GoTO_MODE = true;
+
+                    // Set variables back
+                    {
+                        std::lock_guard<std::mutex> lck(frontReachingMutex);
+                        cur_frontReachingStruct.frontReachingStartTime = frontReachingStartTime;
+                        cur_frontReachingStruct.nfrontReachingCount = nfrontReachingCount;
+                        cur_frontReachingStruct.cur_pathReachingState.pathOnGoing = cur_pathReachingState.pathOnGoing;
+                        cur_frontReachingStruct.cur_pathReachingState.startFront = cur_pathReachingState.startFront;
+                    }
+                    {
+                        std::lock_guard<std::mutex> lck(staticObsMutex);
+                        cur_staticObsStruct.cur_distToMove = cur_distToMove;
+                        cur_staticObsStruct.time_toMove = time_toMove;
+                    }
+                    {
+                        std::lock_guard<std::mutex> lck(validRangeMutex);
+                        cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
+                    }
                 }
                 else{
                     if ( dist_to_reach > -1.0f ){
@@ -3923,74 +3230,6 @@ int32_t main(int32_t argc, char **argv) {
                 }
 
                 if ( on_GoTO_MODE ){
-                    // Set variables back
-                    {
-                        std::lock_guard<std::mutex> lck(validRangeMutex);
-                        cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                        cur_validRangeStruct.cur_validWay = cur_validWay;
-                        cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                        cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                        cur_validRangeStruct.preFront_togo = preFront_togo;
-                    }
-                    {
-                        std::lock_guard<std::mutex> lck(staticObsMutex);
-                        cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                        cur_staticObsStruct.time_toMove = time_toMove;
-                        cur_staticObsStruct.cur_preDist = cur_preDist;
-                        cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                        cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                        cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                        cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                        cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                        cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                        cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                        cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                    } 
-                    {
-                        std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                        cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                        cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                        cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                        cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                        cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                        cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                        cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                        cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                        cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                        cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                        cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                        cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                        cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-                    }  
-                    {
-                        std::lock_guard<std::mutex> lck(targetFindingMutex);
-                        cur_targetFindingStruct.cur_targetCheckState = cur_targetCheckState;
-                        cur_targetFindingStruct.start_turning_angle = start_turning_angle;
-                        cur_targetFindingStruct.dist_to_reach = dist_to_reach;
-                        cur_targetFindingStruct.aimDirection_to_reach = aimDirection_to_reach;
-                        cur_targetFindingStruct.nTargetFindingCount = nTargetFindingCount;
-                        cur_targetFindingStruct.TargetFindingElapsed = TargetFindingElapsed;
-                        cur_targetFindingStruct.targetFindingStartTime = targetFindingStartTime;
-                        cur_targetFindingStruct.targetFindingEndTime = targetFindingEndTime;
-                    }  
-                    {
-                        std::lock_guard<std::mutex> lck(frontReachingMutex);
-                        cur_frontReachingStruct.cur_pathReachingState = cur_pathReachingState;
-                        cur_frontReachingStruct.nfrontReachingCount = nfrontReachingCount;
-                        cur_frontReachingStruct.FrontReachingElapsed = FrontReachingElapsed;
-                        cur_frontReachingStruct.frontReachingStartTime = frontReachingStartTime;
-                        cur_frontReachingStruct.frontReachingEndTime = frontReachingEndTime;
-                    }  
-                    {
-                        std::lock_guard<std::mutex> lck(lookAroundMutex);
-                        cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
-                        cur_lookAroundStruct.cur_lookAroundState = cur_lookAroundStruct.cur_lookAroundState;
-                        cur_lookAroundStruct.ori_front = cur_lookAroundStruct.ori_front;
-                        cur_lookAroundStruct.nlookAroundCount = cur_lookAroundStruct.nlookAroundCount;
-                        cur_lookAroundStruct.LookAroundElapsed = cur_lookAroundStruct.LookAroundElapsed;
-                        cur_lookAroundStruct.lookAroundStartTime = lookAroundStartTime;
-                        cur_lookAroundStruct.lookAroundEndTime = lookAroundEndTime;
-                    }   
                     continue;
                 }
                 else{     
@@ -4028,77 +3267,30 @@ int32_t main(int32_t argc, char **argv) {
                     FrontReachingElapsed += elapsed.count();
                     std::cout <<" , average front reaching elapsed: " << FrontReachingElapsed / nfrontReachingCount << " seconds(s)" << std::endl;
                     std::cout <<" , so far has done front reaching for " << nfrontReachingCount << " times" << std::endl;
+                    
+                    // Set variables back
+                    {
+                        std::lock_guard<std::mutex> lck(validRangeMutex);
+                        cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
+                    }
+                    {
+                        std::lock_guard<std::mutex> lck(targetFindingMutex);
+                        cur_targetFindingStruct.cur_targetCheckState.pointToTarget = cur_targetCheckState.pointToTarget;
+                        cur_targetFindingStruct.cur_targetCheckState.cur_aimDiff = cur_targetCheckState.cur_aimDiff;
+                    }  
+                    {
+                        std::lock_guard<std::mutex> lck(frontReachingMutex);
+                        cur_frontReachingStruct.cur_pathReachingState.pathOnGoing = cur_pathReachingState.pathOnGoing;
+                        cur_frontReachingStruct.cur_pathReachingState.pathReadyToGo = cur_pathReachingState.pathReadyToGo;
+                        cur_frontReachingStruct.frontReachingEndTime = frontReachingEndTime;
+                        cur_frontReachingStruct.FrontReachingElapsed = FrontReachingElapsed;
+                    }
+                    {
+                        std::lock_guard<std::mutex> lck(lookAroundMutex);
+                        cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
+                    }   
                 }
             }
-
-            // Set variables back
-            {
-                std::lock_guard<std::mutex> lck(validRangeMutex);
-                cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                cur_validRangeStruct.cur_validWay = cur_validWay;
-                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                cur_validRangeStruct.preFront_togo = preFront_togo;
-            }
-            {
-                std::lock_guard<std::mutex> lck(staticObsMutex);
-                cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                cur_staticObsStruct.time_toMove = time_toMove;
-                cur_staticObsStruct.cur_preDist = cur_preDist;
-                cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-            } 
-            {
-                std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-            }  
-            {
-                std::lock_guard<std::mutex> lck(targetFindingMutex);
-                cur_targetFindingStruct.cur_targetCheckState = cur_targetCheckState;
-                cur_targetFindingStruct.start_turning_angle = start_turning_angle;
-                cur_targetFindingStruct.dist_to_reach = dist_to_reach;
-                cur_targetFindingStruct.aimDirection_to_reach = aimDirection_to_reach;
-                cur_targetFindingStruct.nTargetFindingCount = nTargetFindingCount;
-                cur_targetFindingStruct.TargetFindingElapsed = TargetFindingElapsed;
-                cur_targetFindingStruct.targetFindingStartTime = targetFindingStartTime;
-                cur_targetFindingStruct.targetFindingEndTime = targetFindingEndTime;
-            }  
-            {
-                std::lock_guard<std::mutex> lck(frontReachingMutex);
-                cur_frontReachingStruct.cur_pathReachingState = cur_pathReachingState;
-                cur_frontReachingStruct.nfrontReachingCount = nfrontReachingCount;
-                cur_frontReachingStruct.FrontReachingElapsed = FrontReachingElapsed;
-                cur_frontReachingStruct.frontReachingStartTime = frontReachingStartTime;
-                cur_frontReachingStruct.frontReachingEndTime = frontReachingEndTime;
-            }  
-            {
-                std::lock_guard<std::mutex> lck(lookAroundMutex);
-                cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
-                cur_lookAroundStruct.cur_lookAroundState = cur_lookAroundStruct.cur_lookAroundState;
-                cur_lookAroundStruct.ori_front = cur_lookAroundStruct.ori_front;
-                cur_lookAroundStruct.nlookAroundCount = cur_lookAroundStruct.nlookAroundCount;
-                cur_lookAroundStruct.LookAroundElapsed = cur_lookAroundStruct.LookAroundElapsed;
-                cur_lookAroundStruct.lookAroundStartTime = lookAroundStartTime;
-                cur_lookAroundStruct.lookAroundEndTime = lookAroundEndTime;
-            }   
         }        
     });
 
@@ -4311,6 +3503,18 @@ int32_t main(int32_t argc, char **argv) {
                     cur_lookAroundState.clearPathCheckStarted = false;
                     cur_lookAroundState.nTimer = 0;
                     on_TURNING_MODE = false;
+
+                    // Set variables back
+                    {
+                        std::lock_guard<std::mutex> lck(lookAroundMutex);
+                        cur_lookAroundStruct.cur_lookAroundState.turnStarted = cur_lookAroundState.turnStarted;
+                        cur_lookAroundStruct.cur_lookAroundState.clearPathCheckStarted = cur_lookAroundState.clearPathCheckStarted;
+                        cur_lookAroundStruct.cur_lookAroundState.nTimer = cur_lookAroundState.nTimer;
+                    }   
+                    {
+                        std::lock_guard<std::mutex> lck(validRangeMutex);
+                        cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
+                    }
                 }
 
                 std::chrono::duration<double> elapsed;
@@ -4340,8 +3544,18 @@ int32_t main(int32_t argc, char **argv) {
                 if ( has_InterruptNeedToReDo )
                     has_InterruptNeedToReDo = false;
                 else if ( has_InterruptNeedToReDo_dynamic )
-                    has_InterruptNeedToReDo_dynamic = false; 
-            
+                    has_InterruptNeedToReDo_dynamic = false;             
+
+                // Set variables back
+                {
+                    std::lock_guard<std::mutex> lck(lookAroundMutex);
+                    cur_lookAroundStruct.LookAroundElapsed = LookAroundElapsed;
+                }   
+                {
+                    std::lock_guard<std::mutex> lck(dynamicObsMutex);
+                    cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
+                    cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
+                }
             }
 
             // Try to find a clear path close to the target
@@ -4360,7 +3574,22 @@ int32_t main(int32_t argc, char **argv) {
                 cur_lookAroundState.startAngle = cur_state_yaw;
                 Goto(od4, 0.0f, 0.0f, 0.0f, 120.0f / 180.0f * M_PI, 2);
                 cur_lookAroundState.clearPathCheckStarted = true;
-                on_TURNING_MODE = true;
+                on_TURNING_MODE = true;             
+
+                // Set variables back
+                {
+                    std::lock_guard<std::mutex> lck(lookAroundMutex);
+                    cur_lookAroundStruct.nlookAroundCount = nlookAroundCount;
+                    cur_lookAroundStruct.lookAroundStartTime = lookAroundStartTime;
+                    cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
+                    cur_lookAroundStruct.cur_lookAroundState.preAngle = cur_lookAroundState.preAngle;
+                    cur_lookAroundStruct.cur_lookAroundState.startAngle = cur_lookAroundState.startAngle;
+                    cur_lookAroundStruct.cur_lookAroundState.clearPathCheckStarted = cur_lookAroundState.clearPathCheckStarted;
+                }   
+                {
+                    std::lock_guard<std::mutex> lck(validRangeMutex);
+                    cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
+                }
             }
             else if ( cur_lookAroundState.turnStarted == false ){
                 if ( std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state_yaw ) ) < 110.0f / 180.0f * M_PI ){
@@ -4397,7 +3626,23 @@ int32_t main(int32_t argc, char **argv) {
                         if ( has_possibleInterrupt )
                             has_possibleInterrupt = false;
                         else if ( has_possibleInterrupt_dynamic )
-                            has_possibleInterrupt_dynamic = false; 
+                            has_possibleInterrupt_dynamic = false;              
+
+                        // Set variables back
+                        {
+                            std::lock_guard<std::mutex> lck(validRangeMutex);
+                            cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
+                        }
+                        {
+                            std::lock_guard<std::mutex> lck(lookAroundMutex);
+                            cur_lookAroundStruct.LookAroundElapsed = LookAroundElapsed;
+                            cur_lookAroundStruct.lookAroundStartTime = lookAroundStartTime;
+                        }   
+                        {
+                            std::lock_guard<std::mutex> lck(dynamicObsMutex);
+                            cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
+                            cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
+                        }   
                     }
                     
                     // std::cout <<" Record target with angle dev: " << std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state_yaw ) ) << ", and vector size: " << angleFrontState_vec.size() << std::endl;
@@ -4419,6 +3664,10 @@ int32_t main(int32_t argc, char **argv) {
                     state.angle = wrap_angle(cur_state_yaw - M_PI / 2.0f);
                     angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
                     // std::cout <<" Add to vector... " << std::endl;
+                    {
+                        std::lock_guard<std::mutex> lck(lookAroundMutex);
+                        cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
+                    }  
                 }
                 else{
                     // Stop the turning action
@@ -4430,96 +3679,40 @@ int32_t main(int32_t argc, char **argv) {
                         
                         // Set variables back
                         {
-                            std::lock_guard<std::mutex> lck(validRangeMutex);
-                            cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                            cur_validRangeStruct.cur_validWay = cur_validWay;
-                            cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                            cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                            cur_validRangeStruct.preFront_togo = preFront_togo;
-                        }
-                        {
-                            std::lock_guard<std::mutex> lck(staticObsMutex);
-                            cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                            cur_staticObsStruct.time_toMove = time_toMove;
-                            cur_staticObsStruct.cur_preDist = cur_preDist;
-                            cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                            cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                            cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                            cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                            cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                            cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                            cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                            cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                        } 
-                        {
-                            std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                            cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                            cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                            cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                            cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                            cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                            cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                            cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                            cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                            cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                            cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                            cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                            cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                            cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-                        }  
-                        {
-                            std::lock_guard<std::mutex> lck(targetFindingMutex);
-                            cur_targetFindingStruct.cur_targetCheckState = cur_targetCheckState;
-                            cur_targetFindingStruct.start_turning_angle = start_turning_angle;
-                            cur_targetFindingStruct.dist_to_reach = dist_to_reach;
-                            cur_targetFindingStruct.aimDirection_to_reach = aimDirection_to_reach;
-                            cur_targetFindingStruct.nTargetFindingCount = nTargetFindingCount;
-                            cur_targetFindingStruct.TargetFindingElapsed = TargetFindingElapsed;
-                            cur_targetFindingStruct.targetFindingStartTime = targetFindingStartTime;
-                            cur_targetFindingStruct.targetFindingEndTime = targetFindingEndTime;
-                        }  
-                        {
-                            std::lock_guard<std::mutex> lck(frontReachingMutex);
-                            cur_frontReachingStruct.cur_pathReachingState = cur_pathReachingState;
-                            cur_frontReachingStruct.nfrontReachingCount = nfrontReachingCount;
-                            cur_frontReachingStruct.FrontReachingElapsed = FrontReachingElapsed;
-                            cur_frontReachingStruct.frontReachingStartTime = frontReachingStartTime;
-                            cur_frontReachingStruct.frontReachingEndTime = frontReachingEndTime;
-                        }  
-                        {
                             std::lock_guard<std::mutex> lck(lookAroundMutex);
-                            cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
-                            cur_lookAroundStruct.cur_lookAroundState = cur_lookAroundStruct.cur_lookAroundState;
-                            cur_lookAroundStruct.ori_front = cur_lookAroundStruct.ori_front;
-                            cur_lookAroundStruct.nlookAroundCount = cur_lookAroundStruct.nlookAroundCount;
-                            cur_lookAroundStruct.LookAroundElapsed = cur_lookAroundStruct.LookAroundElapsed;
-                            cur_lookAroundStruct.lookAroundStartTime = lookAroundStartTime;
-                            cur_lookAroundStruct.lookAroundEndTime = lookAroundEndTime;
+                            cur_lookAroundStruct.cur_lookAroundState.clearPathCheckStarted = cur_lookAroundState.clearPathCheckStarted;
+                            cur_lookAroundStruct.cur_lookAroundState.nTimer = cur_lookAroundState.nTimer;
                         }   
                         continue;
                     }
                     else{
                         std::this_thread::sleep_for(std::chrono::milliseconds(500));
                         cur_lookAroundState.nTimer = 0;
+                        
+                        // Set variables back
+                        {
+                            std::lock_guard<std::mutex> lck(lookAroundMutex);
+                            cur_lookAroundStruct.cur_lookAroundState.nTimer = cur_lookAroundState.nTimer;
+                        }   
                     }
 
-                // Sort the angle array first 
-                if ( cur_lookAroundState.smallToBig == false ){
-                    std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                        if( a.front != b.front )
-                            return a.front > b.front;
-                        return a.angle < b.angle;
-                    });
-                    cur_lookAroundState.smallToBig = true;
-                }
-                else{
-                    std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                        if( a.front != b.front )
-                            return a.front < b.front;
-                        return a.angle < b.angle;
-                    });
-                    cur_lookAroundState.smallToBig = false;
-                }
+                    // Sort the angle array first 
+                    if ( cur_lookAroundState.smallToBig == false ){
+                        std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                            if( a.front != b.front )
+                                return a.front > b.front;
+                            return a.angle < b.angle;
+                        });
+                        cur_lookAroundState.smallToBig = true;
+                    }
+                    else{
+                        std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                            if( a.front != b.front )
+                                return a.front < b.front;
+                            return a.angle < b.angle;
+                        });
+                        cur_lookAroundState.smallToBig = false;
+                    }
 
                     // Check for clear path
                     std::cout <<" Start path checking with angle vector size: " << angleFrontState_vec.size() << std::endl;
@@ -4567,6 +3760,13 @@ int32_t main(int32_t argc, char **argv) {
                             Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 1);
                             std::cout <<" Found a path to go to and start turning to target angle with target: " << pair_cand.angle << std::endl;
                             cur_lookAroundState.turnStarted = true;
+                        
+                            // Set variables back
+                            {
+                                std::lock_guard<std::mutex> lck(lookAroundMutex);
+                                cur_lookAroundStruct.cur_lookAroundState.targetAngle = cur_lookAroundState.targetAngle;
+                                cur_lookAroundStruct.cur_lookAroundState.turnStarted = cur_lookAroundState.turnStarted;
+                            }                               
                             break;
                         }
                     }
@@ -4588,6 +3788,13 @@ int32_t main(int32_t argc, char **argv) {
                         Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 3);
                         std::cout <<" No path to go to so start turning to the previous target angle with target: " << cur_lookAroundState.preAngle << std::endl;
                         cur_lookAroundState.turnStarted = true;
+                        
+                        // Set variables back
+                        {
+                            std::lock_guard<std::mutex> lck(lookAroundMutex);
+                            cur_lookAroundStruct.cur_lookAroundState.targetAngle = cur_lookAroundState.targetAngle;
+                            cur_lookAroundStruct.cur_lookAroundState.turnStarted = cur_lookAroundState.turnStarted;
+                        }   
                     }
                 }
             }
@@ -4635,71 +3842,18 @@ int32_t main(int32_t argc, char **argv) {
                     // Set variables back
                     {
                         std::lock_guard<std::mutex> lck(validRangeMutex);
-                        cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                        cur_validRangeStruct.cur_validWay = cur_validWay;
-                        cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
                         cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                        cur_validRangeStruct.preFront_togo = preFront_togo;
                     }
                     {
-                        std::lock_guard<std::mutex> lck(staticObsMutex);
-                        cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                        cur_staticObsStruct.time_toMove = time_toMove;
-                        cur_staticObsStruct.cur_preDist = cur_preDist;
-                        cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                        cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                        cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                        cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                        cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                        cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                        cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                        cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                    } 
+                        std::lock_guard<std::mutex> lck(lookAroundMutex);
+                        cur_lookAroundStruct.LookAroundElapsed = LookAroundElapsed;
+                        cur_lookAroundStruct.lookAroundStartTime = lookAroundStartTime;
+                    }       
                     {
                         std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                        cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                        cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                        cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                        cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                        cur_dynamicObsStruct.cur_obsState = cur_obsState;
                         cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
                         cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                        cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                        cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                        cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                        cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                        cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                        cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-                    }  
-                    {
-                        std::lock_guard<std::mutex> lck(targetFindingMutex);
-                        cur_targetFindingStruct.cur_targetCheckState = cur_targetCheckState;
-                        cur_targetFindingStruct.start_turning_angle = start_turning_angle;
-                        cur_targetFindingStruct.dist_to_reach = dist_to_reach;
-                        cur_targetFindingStruct.aimDirection_to_reach = aimDirection_to_reach;
-                        cur_targetFindingStruct.nTargetFindingCount = nTargetFindingCount;
-                        cur_targetFindingStruct.TargetFindingElapsed = TargetFindingElapsed;
-                        cur_targetFindingStruct.targetFindingStartTime = targetFindingStartTime;
-                        cur_targetFindingStruct.targetFindingEndTime = targetFindingEndTime;
-                    }  
-                    {
-                        std::lock_guard<std::mutex> lck(frontReachingMutex);
-                        cur_frontReachingStruct.cur_pathReachingState = cur_pathReachingState;
-                        cur_frontReachingStruct.nfrontReachingCount = nfrontReachingCount;
-                        cur_frontReachingStruct.FrontReachingElapsed = FrontReachingElapsed;
-                        cur_frontReachingStruct.frontReachingStartTime = frontReachingStartTime;
-                        cur_frontReachingStruct.frontReachingEndTime = frontReachingEndTime;
-                    }  
-                    {
-                        std::lock_guard<std::mutex> lck(lookAroundMutex);
-                        cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
-                        cur_lookAroundStruct.cur_lookAroundState = cur_lookAroundStruct.cur_lookAroundState;
-                        cur_lookAroundStruct.ori_front = cur_lookAroundStruct.ori_front;
-                        cur_lookAroundStruct.nlookAroundCount = cur_lookAroundStruct.nlookAroundCount;
-                        cur_lookAroundStruct.LookAroundElapsed = cur_lookAroundStruct.LookAroundElapsed;
-                        cur_lookAroundStruct.lookAroundStartTime = lookAroundStartTime;
-                        cur_lookAroundStruct.lookAroundEndTime = lookAroundEndTime;
-                    }                       
+                    }                  
                     // continue turning
                     // std::cout <<" Keep turning to that angle with current angle: " << cur_state_yaw << std::endl;
                     continue;
@@ -4722,6 +3876,10 @@ int32_t main(int32_t argc, char **argv) {
                         state.front = front;
                         state.angle = wrap_angle(cur_state_yaw);
                         angleFrontState_vec.insert(angleFrontState_vec.begin(),state);
+                        {
+                            std::lock_guard<std::mutex> lck(lookAroundMutex);
+                            cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
+                        }  
 
                         // Start to find another way to go to
                         // Sort the angle array first 
@@ -4741,10 +3899,15 @@ int32_t main(int32_t argc, char **argv) {
                             });
                             cur_lookAroundState.smallToBig = false;
                         }
+                        {
+                            std::lock_guard<std::mutex> lck(lookAroundMutex);
+                            cur_lookAroundStruct.cur_lookAroundState.smallToBig = cur_lookAroundState.smallToBig;
+                        }  
 
                         // Check for clear path
                         std::cout <<" Start path checking..." << std::endl;
                         bool hasObOnPath = false; 
+                        bool hasFoundPath = false;
                         for ( const auto& pair_cand : angleFrontState_vec ){
                             if ( pair_cand.front <= safe_endreach_dist + pair_cand.front / 5 ){
                                 continue;
@@ -4779,6 +3942,7 @@ int32_t main(int32_t argc, char **argv) {
                             }
 
                             if ( hasObOnPath == false && std::abs( angleDifference( cur_lookAroundState.preAngle, cur_state_yaw ) ) > 20.0f / 180 * M_PI ){
+                                hasFoundPath = true;
                                 // Found the path, turn to that angle
                                 cur_lookAroundState.targetAngle = pair_cand.angle;
 
@@ -4797,80 +3961,17 @@ int32_t main(int32_t argc, char **argv) {
                             }
                         }
 
-                        // If turning still not starting, we return to previous angle
-                        if ( hasObOnPath == false ){                            
+                        // Found the path, turn to that angle
+                        if ( hasFoundPath ){                            
                             // Set variables back
                             {
-                                std::lock_guard<std::mutex> lck(validRangeMutex);
-                                cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                                cur_validRangeStruct.cur_validWay = cur_validWay;
-                                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                                cur_validRangeStruct.preFront_togo = preFront_togo;
-                            }
-                            {
-                                std::lock_guard<std::mutex> lck(staticObsMutex);
-                                cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                                cur_staticObsStruct.time_toMove = time_toMove;
-                                cur_staticObsStruct.cur_preDist = cur_preDist;
-                                cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                                cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                                cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                                cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                                cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                                cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                                cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                                cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                            } 
-                            {
-                                std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                                cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                                cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                                cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                                cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                                cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                                cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                                cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                                cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                                cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                                cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                                cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-                            }  
-                            {
-                                std::lock_guard<std::mutex> lck(targetFindingMutex);
-                                cur_targetFindingStruct.cur_targetCheckState = cur_targetCheckState;
-                                cur_targetFindingStruct.start_turning_angle = start_turning_angle;
-                                cur_targetFindingStruct.dist_to_reach = dist_to_reach;
-                                cur_targetFindingStruct.aimDirection_to_reach = aimDirection_to_reach;
-                                cur_targetFindingStruct.nTargetFindingCount = nTargetFindingCount;
-                                cur_targetFindingStruct.TargetFindingElapsed = TargetFindingElapsed;
-                                cur_targetFindingStruct.targetFindingStartTime = targetFindingStartTime;
-                                cur_targetFindingStruct.targetFindingEndTime = targetFindingEndTime;
-                            }  
-                            {
-                                std::lock_guard<std::mutex> lck(frontReachingMutex);
-                                cur_frontReachingStruct.cur_pathReachingState = cur_pathReachingState;
-                                cur_frontReachingStruct.nfrontReachingCount = nfrontReachingCount;
-                                cur_frontReachingStruct.FrontReachingElapsed = FrontReachingElapsed;
-                                cur_frontReachingStruct.frontReachingStartTime = frontReachingStartTime;
-                                cur_frontReachingStruct.frontReachingEndTime = frontReachingEndTime;
-                            }  
-                            {
                                 std::lock_guard<std::mutex> lck(lookAroundMutex);
-                                cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
-                                cur_lookAroundStruct.cur_lookAroundState = cur_lookAroundStruct.cur_lookAroundState;
-                                cur_lookAroundStruct.ori_front = cur_lookAroundStruct.ori_front;
-                                cur_lookAroundStruct.nlookAroundCount = cur_lookAroundStruct.nlookAroundCount;
-                                cur_lookAroundStruct.LookAroundElapsed = cur_lookAroundStruct.LookAroundElapsed;
-                                cur_lookAroundStruct.lookAroundStartTime = lookAroundStartTime;
-                                cur_lookAroundStruct.lookAroundEndTime = lookAroundEndTime;
+                                cur_lookAroundStruct.cur_lookAroundState.targetAngle = cur_lookAroundState.targetAngle;
                             }   
                             continue;
                         }
 
-                        // Found the path, turn to that angle
+                        // If turning still not starting, we return to previous angle
                         cur_lookAroundState.targetAngle = cur_lookAroundState.preAngle;
 
                         // Try to turn to the angle
@@ -4887,71 +3988,8 @@ int32_t main(int32_t argc, char **argv) {
                         
                         // Set variables back
                         {
-                            std::lock_guard<std::mutex> lck(validRangeMutex);
-                            cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                            cur_validRangeStruct.cur_validWay = cur_validWay;
-                            cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                            cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                            cur_validRangeStruct.preFront_togo = preFront_togo;
-                        }
-                        {
-                            std::lock_guard<std::mutex> lck(staticObsMutex);
-                            cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                            cur_staticObsStruct.time_toMove = time_toMove;
-                            cur_staticObsStruct.cur_preDist = cur_preDist;
-                            cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                            cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                            cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                            cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                            cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                            cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                            cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                            cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-                        } 
-                        {
-                            std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                            cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                            cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                            cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                            cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                            cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                            cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                            cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                            cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                            cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                            cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                            cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                            cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                            cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-                        }  
-                        {
-                            std::lock_guard<std::mutex> lck(targetFindingMutex);
-                            cur_targetFindingStruct.cur_targetCheckState = cur_targetCheckState;
-                            cur_targetFindingStruct.start_turning_angle = start_turning_angle;
-                            cur_targetFindingStruct.dist_to_reach = dist_to_reach;
-                            cur_targetFindingStruct.aimDirection_to_reach = aimDirection_to_reach;
-                            cur_targetFindingStruct.nTargetFindingCount = nTargetFindingCount;
-                            cur_targetFindingStruct.TargetFindingElapsed = TargetFindingElapsed;
-                            cur_targetFindingStruct.targetFindingStartTime = targetFindingStartTime;
-                            cur_targetFindingStruct.targetFindingEndTime = targetFindingEndTime;
-                        }  
-                        {
-                            std::lock_guard<std::mutex> lck(frontReachingMutex);
-                            cur_frontReachingStruct.cur_pathReachingState = cur_pathReachingState;
-                            cur_frontReachingStruct.nfrontReachingCount = nfrontReachingCount;
-                            cur_frontReachingStruct.FrontReachingElapsed = FrontReachingElapsed;
-                            cur_frontReachingStruct.frontReachingStartTime = frontReachingStartTime;
-                            cur_frontReachingStruct.frontReachingEndTime = frontReachingEndTime;
-                        }  
-                        {
                             std::lock_guard<std::mutex> lck(lookAroundMutex);
-                            cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
-                            cur_lookAroundStruct.cur_lookAroundState = cur_lookAroundStruct.cur_lookAroundState;
-                            cur_lookAroundStruct.ori_front = cur_lookAroundStruct.ori_front;
-                            cur_lookAroundStruct.nlookAroundCount = cur_lookAroundStruct.nlookAroundCount;
-                            cur_lookAroundStruct.LookAroundElapsed = cur_lookAroundStruct.LookAroundElapsed;
-                            cur_lookAroundStruct.lookAroundStartTime = lookAroundStartTime;
-                            cur_lookAroundStruct.lookAroundEndTime = lookAroundEndTime;
+                            cur_lookAroundStruct.cur_lookAroundState.targetAngle = cur_lookAroundState.targetAngle;
                         }   
                         continue;                        
                     }
@@ -4982,76 +4020,26 @@ int32_t main(int32_t argc, char **argv) {
                     LookAroundElapsed += elapsed.count();
                     std::cout <<" , average look around elapsed: " << LookAroundElapsed / nlookAroundCount << " seconds(s)" << std::endl;
                     std::cout <<" , so far has done look around for " << nlookAroundCount << " times" << std::endl;
-                }
-            }   
             
-            // Set variables back
-            {
-                std::lock_guard<std::mutex> lck(validRangeMutex);
-                cur_validRangeStruct.distPathstate_vec = distPathstate_vec;
-                cur_validRangeStruct.cur_validWay = cur_validWay;
-                cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
-                cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
-                cur_validRangeStruct.preFront_togo = preFront_togo;
-            }
-            {
-                std::lock_guard<std::mutex> lck(staticObsMutex);
-                cur_staticObsStruct.cur_distToMove = cur_distToMove;
-                cur_staticObsStruct.time_toMove = time_toMove;
-                cur_staticObsStruct.cur_preDist = cur_preDist;
-                cur_staticObsStruct.cur_reachEndState = cur_reachEndState;
-                cur_staticObsStruct.staticDodgeLeft = staticDodgeLeft;
-                cur_staticObsStruct.staticDodgeRight = staticDodgeRight;
-                cur_staticObsStruct.isCloseToStaticObs = isCloseToStaticObs;
-                cur_staticObsStruct.nObsStaticCount = nObsStaticCount;
-                cur_staticObsStruct.ObsStaticElapsed = ObsStaticElapsed;
-                cur_staticObsStruct.obsStaticStartTime = obsStaticStartTime;
-                cur_staticObsStruct.obsStaticEndTime = obsStaticEndTime;
-            } 
-            {
-                std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                cur_dynamicObsStruct.dodgeDist = dodgeDist;
-                cur_dynamicObsStruct.dodgeDist_UP = dodgeDist_UP;
-                cur_dynamicObsStruct.has_dodgeToRear = has_dodgeToRear;
-                cur_dynamicObsStruct.cur_dodgeType = cur_dodgeType;
-                cur_dynamicObsStruct.cur_obsState = cur_obsState;
-                cur_dynamicObsStruct.has_possibleInterrupt = has_possibleInterrupt;
-                cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
-                cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
-                cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
-                cur_dynamicObsStruct.nObsDynamicCount = nObsDynamicCount;
-                cur_dynamicObsStruct.ObsDynamicElapsed = ObsDynamicElapsed;
-                cur_dynamicObsStruct.obsDynamicStartTime = obsDynamicStartTime;
-                cur_dynamicObsStruct.obsDynamicEndTime = obsDynamicEndTime;
-            }  
-            {
-                std::lock_guard<std::mutex> lck(targetFindingMutex);
-                cur_targetFindingStruct.cur_targetCheckState = cur_targetCheckState;
-                cur_targetFindingStruct.start_turning_angle = start_turning_angle;
-                cur_targetFindingStruct.dist_to_reach = dist_to_reach;
-                cur_targetFindingStruct.aimDirection_to_reach = aimDirection_to_reach;
-                cur_targetFindingStruct.nTargetFindingCount = nTargetFindingCount;
-                cur_targetFindingStruct.TargetFindingElapsed = TargetFindingElapsed;
-                cur_targetFindingStruct.targetFindingStartTime = targetFindingStartTime;
-                cur_targetFindingStruct.targetFindingEndTime = targetFindingEndTime;
-            }  
-            {
-                std::lock_guard<std::mutex> lck(frontReachingMutex);
-                cur_frontReachingStruct.cur_pathReachingState = cur_pathReachingState;
-                cur_frontReachingStruct.nfrontReachingCount = nfrontReachingCount;
-                cur_frontReachingStruct.FrontReachingElapsed = FrontReachingElapsed;
-                cur_frontReachingStruct.frontReachingStartTime = frontReachingStartTime;
-                cur_frontReachingStruct.frontReachingEndTime = frontReachingEndTime;
-            }  
-            {
-                std::lock_guard<std::mutex> lck(lookAroundMutex);
-                cur_lookAroundStruct.angleFrontState_vec = angleFrontState_vec;
-                cur_lookAroundStruct.cur_lookAroundState = cur_lookAroundStruct.cur_lookAroundState;
-                cur_lookAroundStruct.ori_front = cur_lookAroundStruct.ori_front;
-                cur_lookAroundStruct.nlookAroundCount = cur_lookAroundStruct.nlookAroundCount;
-                cur_lookAroundStruct.LookAroundElapsed = cur_lookAroundStruct.LookAroundElapsed;
-                cur_lookAroundStruct.lookAroundStartTime = lookAroundStartTime;
-                cur_lookAroundStruct.lookAroundEndTime = lookAroundEndTime;
+                    // Set variables back
+                    {
+                        std::lock_guard<std::mutex> lck(frontReachingMutex);
+                        cur_frontReachingStruct.cur_pathReachingState.pathReadyToGo = cur_pathReachingState.pathReadyToGo;
+                    }  
+                    {
+                        std::lock_guard<std::mutex> lck(lookAroundMutex);
+                        cur_lookAroundStruct.ori_front = cur_lookAroundStruct.ori_front;
+                        cur_lookAroundStruct.cur_lookAroundState.turnStarted = cur_lookAroundState.turnStarted;
+                        cur_lookAroundStruct.cur_lookAroundState.clearPathCheckStarted = cur_lookAroundState.clearPathCheckStarted;
+                        cur_lookAroundStruct.cur_lookAroundState.startAngle = cur_lookAroundState.startAngle;
+                        cur_lookAroundStruct.lookAroundEndTime = lookAroundEndTime;
+                        cur_lookAroundStruct.LookAroundElapsed = LookAroundElapsed;
+                    }   
+                    {
+                        std::lock_guard<std::mutex> lck(validRangeMutex);
+                        cur_validRangeStruct.on_TURNING_MODE = on_TURNING_MODE;
+                    }
+                }
             }   
         }        
     });
@@ -5273,6 +4261,7 @@ int32_t main(int32_t argc, char **argv) {
                         std::cout <<" Do landing and stopping with low battery..." << std::endl;
 
                     // Record the end time
+                    isTerminateThread = true;
                     taskEndTime = std::chrono::high_resolution_clock::now();
                     const std::chrono::duration<double> elapsed = taskEndTime - taskStartTime;
 
