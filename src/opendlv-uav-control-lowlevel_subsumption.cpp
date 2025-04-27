@@ -3715,17 +3715,17 @@ int32_t main(int32_t argc, char **argv) {
                     // Sort the angle array first               
                     if ( cur_lookAroundState.nRangeTimer == 3 ){
                         if ( cur_lookAroundState.targetRangeX <= 0.5f ){
-                            std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [cur_state_yaw](const angleFrontState& a, const angleFrontState& b) {
-                                if( std::abs( a.front * std::cos( cur_state_yaw ) ) != std::abs( b.front * std::cos( cur_state_yaw ) ) )
-                                    return std::abs( a.front * std::cos( cur_state_yaw ) ) > std::abs( b.front * std::cos( cur_state_yaw ) );
-                                return std::abs( a.front * std::cos( cur_state_yaw ) ) < std::abs( b.front * std::cos( cur_state_yaw ) );
+                            std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                                if( std::abs( a.front * std::cos( a.angle ) ) != std::abs( b.front * std::cos( b.angle ) ) )
+                                    return std::abs( a.front * std::cos( a.angle ) ) > std::abs( b.front * std::cos( b.angle ) );
+                                return std::abs( a.front * std::cos( a.angle ) ) < std::abs( b.front * std::cos( b.angle ) );
                             });
                         }
                         else if ( cur_lookAroundState.targetRangeY <= 0.5f ){
-                            std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [cur_state_yaw](const angleFrontState& a, const angleFrontState& b) {
-                                if( std::abs( a.front * std::sin( cur_state_yaw ) ) != std::abs( b.front * std::sin( cur_state_yaw ) ) )
-                                    return std::abs( a.front * std::sin( cur_state_yaw ) ) > std::abs( b.front * std::sin( cur_state_yaw ) );
-                                return std::abs( a.front * std::sin( cur_state_yaw ) ) < std::abs( b.front * std::sin( cur_state_yaw ) );
+                            std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                                if( std::abs( a.front * std::sin( a.angle ) ) != std::abs( b.front * std::sin( b.angle ) ) )
+                                    return std::abs( a.front * std::sin( a.angle ) ) > std::abs( b.front * std::sin( b.angle ) );
+                                return std::abs( a.front * std::sin( a.angle ) ) < std::abs( b.front * std::sin( b.angle ) );
                             });
                         }
                     }
@@ -3917,17 +3917,17 @@ int32_t main(int32_t argc, char **argv) {
                         // Sort the angle array first               
                         if ( cur_lookAroundState.nRangeTimer == 3 ){
                             if ( cur_lookAroundState.targetRangeX <= 0.5f ){
-                                std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [cur_state_yaw](const angleFrontState& a, const angleFrontState& b) {
-                                    if( std::abs( a.front * std::cos( cur_state_yaw ) ) != std::abs( b.front * std::cos( cur_state_yaw ) ) )
-                                        return std::abs( a.front * std::cos( cur_state_yaw ) ) > std::abs( b.front * std::cos( cur_state_yaw ) );
-                                    return std::abs( a.front * std::cos( cur_state_yaw ) ) < std::abs( b.front * std::cos( cur_state_yaw ) );
+                                std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                                    if( std::abs( a.front * std::cos( a.angle ) ) != std::abs( b.front * std::cos( b.angle ) ) )
+                                        return std::abs( a.front * std::cos( a.angle ) ) > std::abs( b.front * std::cos( b.angle ) );
+                                    return std::abs( a.front * std::cos( a.angle ) ) < std::abs( b.front * std::cos( b.angle ) );
                                 });
                             }
                             else if ( cur_lookAroundState.targetRangeY <= 0.5f ){
-                                std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [cur_state_yaw](const angleFrontState& a, const angleFrontState& b) {
-                                    if( std::abs( a.front * std::sin( cur_state_yaw ) ) != std::abs( b.front * std::sin( cur_state_yaw ) ) )
-                                        return std::abs( a.front * std::sin( cur_state_yaw ) ) > std::abs( b.front * std::sin( cur_state_yaw ) );
-                                    return std::abs( a.front * std::sin( cur_state_yaw ) ) < std::abs( b.front * std::sin( cur_state_yaw ) );
+                                std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                                    if( std::abs( a.front * std::sin( a.angle ) ) != std::abs( b.front * std::sin( b.angle ) ) )
+                                        return std::abs( a.front * std::sin( a.angle ) ) > std::abs( b.front * std::sin( b.angle ) );
+                                    return std::abs( a.front * std::sin( a.angle ) ) < std::abs( b.front * std::sin( b.angle ) );
                                 });
                             }
                         }
