@@ -368,8 +368,11 @@
          float startAngle;
          float targetAngle;
          int nTimer;
+         float targetRangeX;
+         float targetRangeY;
+         int nRangeTimer;
      };
-     lookAroundState cur_lookAroundState = {false, false, false, -1.0f, -10.0f, -1.0f, 0};
+     lookAroundState cur_lookAroundState = {false, false, false, -1.0f, -10.0f, -1.0f, 0, -1.0f, -1.0f, 0};
      float ori_front{0.0f};
      std::random_device rd;
      std::mt19937 gen(rd());
@@ -1846,8 +1849,24 @@
                      cur_lookAroundState.nTimer = 0;
                  }
  
-                // Sort the angle array first 
-                if ( cur_lookAroundState.smallToBig == false ){
+                // Sort the angle array first                 
+                if ( cur_lookAroundState.nRangeTimer == 3 ){
+                    if ( cur_lookAroundState.targetRangeX <= 0.5f ){
+                        std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [cur_state_yaw](const angleFrontState& a, const angleFrontState& b) {
+                            if( std::abs( a.front * std::cos( cur_state_yaw ) ) != std::abs( b.front * std::cos( cur_state_yaw ) ) )
+                                return std::abs( a.front * std::cos( cur_state_yaw ) ) > std::abs( b.front * std::cos( cur_state_yaw ) );
+                            return std::abs( a.front * std::cos( cur_state_yaw ) ) < std::abs( b.front * std::cos( cur_state_yaw ) );
+                        });
+                    }
+                    else if ( cur_lookAroundState.targetRangeY <= 0.5f ){
+                        std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [cur_state_yaw](const angleFrontState& a, const angleFrontState& b) {
+                            if( std::abs( a.front * std::sin( cur_state_yaw ) ) != std::abs( b.front * std::sin( cur_state_yaw ) ) )
+                                return std::abs( a.front * std::sin( cur_state_yaw ) ) > std::abs( b.front * std::sin( cur_state_yaw ) );
+                            return std::abs( a.front * std::sin( cur_state_yaw ) ) < std::abs( b.front * std::sin( cur_state_yaw ) );
+                        });
+                    }
+                }
+                else if ( cur_lookAroundState.smallToBig == false ){
                     std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
                         if( a.front != b.front )
                             return a.front > b.front;
@@ -2001,7 +2020,23 @@
  
                      // Start to find another way to go to
                      // Sort the angle array first 
-                    if ( cur_lookAroundState.smallToBig == false ){
+                    if ( cur_lookAroundState.nRangeTimer == 3 ){
+                        if ( cur_lookAroundState.targetRangeX <= 0.5f ){
+                            std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [cur_state_yaw](const angleFrontState& a, const angleFrontState& b) {
+                                if( std::abs( a.front * std::cos( cur_state_yaw ) ) != std::abs( b.front * std::cos( cur_state_yaw ) ) )
+                                    return std::abs( a.front * std::cos( cur_state_yaw ) ) > std::abs( b.front * std::cos( cur_state_yaw ) );
+                                return std::abs( a.front * std::cos( cur_state_yaw ) ) < std::abs( b.front * std::cos( cur_state_yaw ) );
+                            });
+                        }
+                        else if ( cur_lookAroundState.targetRangeY <= 0.5f ){
+                            std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [cur_state_yaw](const angleFrontState& a, const angleFrontState& b) {
+                                if( std::abs( a.front * std::sin( cur_state_yaw ) ) != std::abs( b.front * std::sin( cur_state_yaw ) ) )
+                                    return std::abs( a.front * std::sin( cur_state_yaw ) ) > std::abs( b.front * std::sin( cur_state_yaw ) );
+                                return std::abs( a.front * std::sin( cur_state_yaw ) ) < std::abs( b.front * std::sin( cur_state_yaw ) );
+                            });
+                        }
+                    }
+                    else if ( cur_lookAroundState.smallToBig == false ){
                         std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
                             if( a.front != b.front )
                                 return a.front > b.front;
@@ -2099,6 +2134,22 @@
  
                  cur_pathReachingState.pathReadyToGo = true;
                  ori_front = front;
+
+                 // Record ranges
+                 if ( cur_lookAroundState.nRangeTimer <= 2 ){
+                    cur_lookAroundState.nRangeTimer += 1;
+                 }
+                 else{
+                    cur_lookAroundState.nRangeTimer = 0;
+                    cur_lookAroundState.targetRangeX = -1.0f;
+                    cur_lookAroundState.targetRangeY = -1.0f;
+                 }
+                 if ( cur_lookAroundState.targetRangeX <= std::abs( front * std::cos( cur_state_yaw ) ) ){
+                    cur_lookAroundState.targetRangeX = std::abs( front * std::cos( cur_state_yaw ) );
+                 }
+                 if ( cur_lookAroundState.targetRangeY <= std::abs( front * std::cos( cur_state_yaw ) ) ){
+                    cur_lookAroundState.targetRangeY = std::abs( front * std::cos( cur_state_yaw ) );
+                 }
  
                  // Reset other flags
                  cur_lookAroundState.turnStarted = false;
