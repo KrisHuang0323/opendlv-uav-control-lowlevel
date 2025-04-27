@@ -4285,7 +4285,7 @@ int32_t main(int32_t argc, char **argv) {
                         std::chrono::time_point_cast<std::chrono::system_clock::duration>(taskEndTime)
                     );
 
-                    std::cout <<" Task complete with start time: " << std::ctime(&start_time_t) << std::endl;
+                    std::cout <<" Task(subsumption ver.) complete with start time: " << std::ctime(&start_time_t) << std::endl;
                     std::cout <<" , end time: " << std::ctime(&end_time_t) << std::endl;
                     std::cout <<" , task elapsed: " << elapsed.count() << " seconds(s)" << std::endl;
                     std::cout <<" , average obs static dodging elapsed: " << ObsStaticElapsed / nObsStaticCount << " seconds(s)" << std::endl;
