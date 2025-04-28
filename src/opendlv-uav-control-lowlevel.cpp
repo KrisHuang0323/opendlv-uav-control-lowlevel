@@ -324,6 +324,7 @@
      bool has_possibleInterrupt_dynamic = false;
      bool has_InterruptNeedToReDo = false;
      bool has_InterruptNeedToReDo_dynamic = false;
+     bool has_InterruptNeedToReDo_stuck = false;
  
      // Variables for front reaching
      struct pathReachingState {
@@ -617,7 +618,7 @@
          }
          else{
             if ( front_dev <= 0.1f ){
-                has_InterruptNeedToReDo = true;
+                has_InterruptNeedToReDo_stuck = true;
                 std::cout << "Stucks at some positions, try to escape by redo..." << std::endl;
                 nStuckEscapeCount += 1;
             }
@@ -1141,7 +1142,7 @@
              -- move distance
          */ 
          // If Interrupted
-         if ( has_InterruptNeedToReDo || has_InterruptNeedToReDo_dynamic ){
+         if ( has_InterruptNeedToReDo || has_InterruptNeedToReDo_dynamic || has_InterruptNeedToReDo_stuck ){
              if ( cur_targetCheckState.pointToTarget == false && ( cur_targetCheckState.turnStarted || cur_targetCheckState.aimTurnStarted ) ){
                  std::cout <<" Possible interruption needed redo without target..." << std::endl;
                  cur_targetCheckState.aimTurnStarted = false;
@@ -1166,10 +1167,15 @@
                     elapsed = obsStaticStartTime - targetFindingStartTime;
                  else if ( has_InterruptNeedToReDo_dynamic )
                     elapsed = obsDynamicStartTime - targetFindingStartTime;
+                 else if ( has_InterruptNeedToReDo_stuck )
+                    elapsed = std::chrono::high_resolution_clock::now() - targetFindingStartTime;
+
                  if ( has_InterruptNeedToReDo )
                     has_InterruptNeedToReDo = false;
                  if ( has_InterruptNeedToReDo_dynamic )
                     has_InterruptNeedToReDo_dynamic = false;
+                 if ( has_InterruptNeedToReDo_stuck )
+                    has_InterruptNeedToReDo_stuck = false;
 
                  std::cout <<" Original target finding start time: " << std::ctime(&start_time_t) << std::endl;
                  std::cout <<" Interrupted after: " << elapsed.count() << "seconds(s)" << std::endl;
@@ -1581,7 +1587,7 @@
          }
  
          // If being interrupted, try to go to the original path again
-         if ( has_possibleInterrupt || has_possibleInterrupt_dynamic || has_InterruptNeedToReDo || has_InterruptNeedToReDo_dynamic ){
+         if ( has_possibleInterrupt || has_possibleInterrupt_dynamic || has_InterruptNeedToReDo || has_InterruptNeedToReDo_dynamic || has_InterruptNeedToReDo_stuck ){
              if ( cur_pathReachingState.pathReadyToGo && cur_pathReachingState.pathOnGoing ){
                 std::cout <<" Being interrupted and try to go again..." << std::endl;
                 cur_pathReachingState.pathOnGoing = false;
@@ -1600,6 +1606,8 @@
                     elapsed = obsStaticStartTime - frontReachingStartTime;
                 else if ( has_possibleInterrupt_dynamic || has_InterruptNeedToReDo_dynamic )
                     elapsed = obsDynamicStartTime - frontReachingStartTime;
+                else if ( has_InterruptNeedToReDo_stuck )
+                    elapsed = std::chrono::high_resolution_clock::now() - frontReachingStartTime;
 
                 auto start_time_t = std::chrono::system_clock::to_time_t(
                     std::chrono::time_point_cast<std::chrono::system_clock::duration>(frontReachingStartTime)
@@ -1617,6 +1625,8 @@
                     has_InterruptNeedToReDo = false;
                 if ( has_InterruptNeedToReDo_dynamic )
                     has_InterruptNeedToReDo_dynamic = false;
+                if ( has_InterruptNeedToReDo_stuck )
+                    has_InterruptNeedToReDo_stuck = false;
 
                 // Restart the timer again             
                 frontReachingStartTime = std::chrono::high_resolution_clock::now(); 
@@ -1718,7 +1728,7 @@
              - In the mean time, record some possible front path to go to
          */
          // If Interrupted
-         if ( has_InterruptNeedToReDo || has_InterruptNeedToReDo_dynamic ){
+         if ( has_InterruptNeedToReDo || has_InterruptNeedToReDo_dynamic || has_InterruptNeedToReDo_stuck ){
              if ( cur_lookAroundState.turnStarted || cur_lookAroundState.clearPathCheckStarted ){
                  std::cout <<" Possible interruption to reset look around..." << std::endl;
                  cur_lookAroundState.turnStarted = false;
@@ -1742,6 +1752,8 @@
                  elapsed = obsStaticStartTime - lookAroundStartTime;
              else if ( has_InterruptNeedToReDo_dynamic )
                  elapsed = obsDynamicStartTime - lookAroundStartTime;
+             else if ( has_InterruptNeedToReDo_stuck )
+                 elapsed = std::chrono::high_resolution_clock::now() - lookAroundStartTime;
  
              auto start_time_t = std::chrono::system_clock::to_time_t(
                  std::chrono::time_point_cast<std::chrono::system_clock::duration>(lookAroundStartTime)
@@ -1755,6 +1767,8 @@
                  has_InterruptNeedToReDo = false;
              else if ( has_InterruptNeedToReDo_dynamic )
                  has_InterruptNeedToReDo_dynamic = false; 
+             else if ( has_InterruptNeedToReDo_stuck )
+                 has_InterruptNeedToReDo_stuck = false; 
             
          }
  

@@ -84,7 +84,7 @@ crazyflie-control-1         |  , average close to static obs elapsed: -nan secon
 crazyflie-control-1         |  , so far has closed to static obs for 0 times
 crazyflie-control-1         |  , so far has escaped from stucks for 0 times
 4.(90)-Subsumption
- Task(subsumption ver.) complete with start time: Mon Apr 28 17:06:55 2025
+Task(subsumption ver.) complete with start time: Mon Apr 28 17:06:55 2025
 crazyflie-control-1         | 
 crazyflie-control-1         |  , end time: Mon Apr 28 17:08:59 2025
 crazyflie-control-1         | 
@@ -104,8 +104,9 @@ crazyflie-control-1         |  , so far has closed to ball for 0 times
 crazyflie-control-1         |  , average close to static obs elapsed: -nan seconds(s)
 crazyflie-control-1         |  , so far has closed to static obs for 0 times
 crazyflie-control-1         |  , so far has escaped from stucks for 0 times
+
 5.(100)-Subsumption
-crazyflie-control-1         |  Task(subsumption ver.) complete with start time: Mon Apr 28 17:15:41 2025
+Task(subsumption ver.) complete with start time: Mon Apr 28 17:15:41 2025
 crazyflie-control-1         | 
 crazyflie-control-1         |  , end time: Mon Apr 28 17:17:35 2025
 crazyflie-control-1         | 

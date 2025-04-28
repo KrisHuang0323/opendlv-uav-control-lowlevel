@@ -785,8 +785,13 @@ int32_t main(int32_t argc, char **argv) {
                                     &validRangeMutex, &cur_validRangeStruct,
                                     &staticObsMutex, &cur_staticObsStruct,
                                     &dynamicObsMutex, &cur_dynamicObsStruct](){
-        while( od4->isRunning() && isTerminateThread == false ){
+        while( od4->isRunning() ){
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+            if ( isTerminateThread ){
+                Goto(od4, 0.0f, 0.0f, 0.0f, 0, 1, true);
+                break;
+            }
 
             // Variables for constant
             float safe_endreach_ultimate_dist{0.0f};
@@ -1429,8 +1434,13 @@ int32_t main(int32_t argc, char **argv) {
                                      &validRangeMutex, &cur_validRangeStruct,
                                      &staticObsMutex, &cur_staticObsStruct,
                                      &dynamicObsMutex, &cur_dynamicObsStruct](){
-        while( od4->isRunning() && isTerminateThread == false ){
+        while( od4->isRunning() ){
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            
+            if ( isTerminateThread ){
+                Goto(od4, 0.0f, 0.0f, 0.0f, 0, 1, true);
+                break;
+            }
 
             if ( cur_suppressStruct.isObsStaticDominating ){
                 // std::cout << "Dynamic obs task being suppressed!" << std::endl;
@@ -1966,8 +1976,13 @@ int32_t main(int32_t argc, char **argv) {
                                     &targetFindingMutex, &cur_targetFindingStruct,
                                     &frontReachingMutex, &cur_frontReachingStruct,
                                     &lookAroundMutex, &cur_lookAroundStruct](){
-        while( od4->isRunning() && isTerminateThread == false ){
+        while( od4->isRunning() ){
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+            if ( isTerminateThread ){
+                Goto(od4, 0.0f, 0.0f, 0.0f, 0, 1, true);
+                break;
+            }
 
             if ( cur_suppressStruct.isObsStaticDominating || cur_suppressStruct.isObsDynamicDominating ){
                 // std::cout << "Target finding task being suppressed!" << std::endl;
@@ -2249,6 +2264,11 @@ int32_t main(int32_t argc, char **argv) {
             // std::cout <<" Current angle: " << aimDirection_to_reach << ", current battery state: "<< cur_state_battery_state << std::endl;  
             if ( cur_targetCheckState.pointToTarget == false && ( ( aimDirection_to_reach != -4.0f && dist_to_reach * std::cos( aimDirection_to_reach ) > 20.0f ) || cur_targetCheckState.aimTurnStarted ) ){
                 if ( cur_targetCheckState.aimTurnStarted == false ){
+                    if ( cur_suppressStruct.isObsStaticDominating || cur_suppressStruct.isObsDynamicDominating ){
+                        // std::cout << "Target finding task being suppressed!" << std::endl;
+                        continue;
+                    }   // Wait until the domination change to target finding
+
                     targetFindingStartTime = std::chrono::high_resolution_clock::now();
                     nTargetFindingCount += 1;
                     std::cout <<" Find target start turning..." << std::endl;   
@@ -2293,6 +2313,11 @@ int32_t main(int32_t argc, char **argv) {
                     continue;
                 }
                 else if ( cur_targetCheckState.turnStarted == false ){
+                    if ( cur_suppressStruct.isObsStaticDominating || cur_suppressStruct.isObsDynamicDominating ){
+                        // std::cout << "Target finding task being suppressed!" << std::endl;
+                        continue;
+                    }   // Wait until the domination change to target finding
+
                     if ( std::abs( angleDifference( cur_targetCheckState.startAngle, cur_state_yaw ) ) < std::abs(cur_targetCheckState.ang_toTurn) && cur_targetCheckState.oriAimDirection * aimDirection_to_reach > 0.0f ){
                         // Do the returning if something interrupt
                         if ( has_possibleInterrupt || has_possibleInterrupt_dynamic ){
@@ -2471,6 +2496,11 @@ int32_t main(int32_t argc, char **argv) {
                     continue;
                 }
                 else{
+                    if ( cur_suppressStruct.isObsStaticDominating || cur_suppressStruct.isObsDynamicDominating ){
+                        // std::cout << "Target finding task being suppressed!" << std::endl;
+                        continue;
+                    }   // Wait until the domination change to target finding
+                    
                     std::atomic<float> yaw{0.0f};
                     {
                         yaw.store(cur_state_yaw, std::memory_order_relaxed);
@@ -2706,8 +2736,13 @@ int32_t main(int32_t argc, char **argv) {
                                     &targetFindingMutex, &cur_targetFindingStruct,
                                     &frontReachingMutex, &cur_frontReachingStruct,
                                     &lookAroundMutex, &cur_lookAroundStruct](){
-        while( od4->isRunning() && isTerminateThread == false ){
+        while( od4->isRunning() ){
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+            if ( isTerminateThread ){
+                Goto(od4, 0.0f, 0.0f, 0.0f, 0, 1, true);
+                break;
+            }
 
             if ( cur_suppressStruct.isObsStaticDominating || cur_suppressStruct.isObsDynamicDominating
                  || cur_suppressStruct.isTargetFindingDominating || cur_suppressStruct.isSupressFrontReaching ){
@@ -2982,6 +3017,12 @@ int32_t main(int32_t argc, char **argv) {
             // Go to path
             if ( cur_pathReachingState.pathReadyToGo ){
                 if ( cur_pathReachingState.pathOnGoing == false ){
+                    if ( cur_suppressStruct.isObsStaticDominating || cur_suppressStruct.isObsDynamicDominating
+                         || cur_suppressStruct.isTargetFindingDominating || cur_suppressStruct.isSupressFrontReaching ){
+                        // std::cout << "Front reaching task being suppressed!" << std::endl;
+                        continue;
+                    }   // Wait until the domination change to target finding
+
                     frontReachingStartTime = std::chrono::high_resolution_clock::now();
                     nfrontReachingCount += 1;
                     {
@@ -3027,6 +3068,12 @@ int32_t main(int32_t argc, char **argv) {
                     }
                 }
                 else{
+                    if ( cur_suppressStruct.isObsStaticDominating || cur_suppressStruct.isObsDynamicDominating
+                        || cur_suppressStruct.isTargetFindingDominating || cur_suppressStruct.isSupressFrontReaching ){
+                        // std::cout << "Front reaching task being suppressed!" << std::endl;
+                        continue;
+                    }   // Wait until the domination change to target finding
+                    
                     if ( dist_to_reach > -1.0f ){
                         // Reach the target, stop current action
                         if ( dist_to_reach <= 80.0f ){
@@ -3134,8 +3181,13 @@ int32_t main(int32_t argc, char **argv) {
                                 &targetFindingMutex, &cur_targetFindingStruct,
                                 &frontReachingMutex, &cur_frontReachingStruct,
                                 &lookAroundMutex, &cur_lookAroundStruct](){
-        while( od4->isRunning() && isTerminateThread == false ){            
+        while( od4->isRunning() ){            
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+            if ( isTerminateThread ){
+                Goto(od4, 0.0f, 0.0f, 0.0f, 0, 1, true);
+                break;
+            }
 
             if ( cur_suppressStruct.isObsStaticDominating || cur_suppressStruct.isObsDynamicDominating
                 || cur_suppressStruct.isTargetFindingDominating || cur_suppressStruct.isFrontReachingDominating ){
