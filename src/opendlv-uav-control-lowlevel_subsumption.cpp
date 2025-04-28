@@ -3115,8 +3115,8 @@ int32_t main(int32_t argc, char **argv) {
                     cur_pathReachingState.pathOnGoing = false;
                     std::chrono::duration<double> elapsed;
                     if ( ( has_possibleInterrupt && has_possibleInterrupt_dynamic ) || ( has_InterruptNeedToReDo && has_InterruptNeedToReDo_dynamic ) ){
-                        std::chrono::duration<double> e1 = obsStaticStartTime - targetFindingStartTime;
-                        std::chrono::duration<double> e2 = obsDynamicStartTime - targetFindingStartTime;
+                        std::chrono::duration<double> e1 = obsStaticStartTime - frontReachingStartTime;
+                        std::chrono::duration<double> e2 = obsDynamicStartTime - frontReachingStartTime;
                         if ( e1.count() > e2.count() ){
                             elapsed = e1;
                         }
@@ -3125,9 +3125,9 @@ int32_t main(int32_t argc, char **argv) {
                         }
                     }
                     else if ( has_possibleInterrupt || has_InterruptNeedToReDo )
-                        elapsed = obsStaticStartTime - targetFindingStartTime;
+                        elapsed = obsStaticStartTime - frontReachingStartTime;
                     else if ( has_possibleInterrupt_dynamic || has_InterruptNeedToReDo_dynamic )
-                        elapsed = obsDynamicStartTime - targetFindingStartTime;
+                        elapsed = obsDynamicStartTime - frontReachingStartTime;
 
                     auto start_time_t = std::chrono::system_clock::to_time_t(
                         std::chrono::time_point_cast<std::chrono::system_clock::duration>(frontReachingStartTime)
@@ -3535,8 +3535,8 @@ int32_t main(int32_t argc, char **argv) {
 
                 std::chrono::duration<double> elapsed;
                 if ( has_InterruptNeedToReDo && has_InterruptNeedToReDo_dynamic ){
-                    std::chrono::duration<double> e1 = obsStaticStartTime - targetFindingStartTime;
-                    std::chrono::duration<double> e2 = obsDynamicStartTime - targetFindingStartTime;
+                    std::chrono::duration<double> e1 = obsStaticStartTime - lookAroundStartTime;
+                    std::chrono::duration<double> e2 = obsDynamicStartTime - lookAroundStartTime;
                     if ( e1.count() > e2.count() ){
                         elapsed = e1;
                     }
@@ -3545,9 +3545,9 @@ int32_t main(int32_t argc, char **argv) {
                     }
                 }
                 else if ( has_InterruptNeedToReDo )
-                    elapsed = obsStaticStartTime - targetFindingStartTime;
+                    elapsed = obsStaticStartTime - lookAroundStartTime;
                 else if ( has_InterruptNeedToReDo_dynamic )
-                    elapsed = obsDynamicStartTime - targetFindingStartTime;
+                    elapsed = obsDynamicStartTime - lookAroundStartTime;
 
                 auto start_time_t = std::chrono::system_clock::to_time_t(
                     std::chrono::time_point_cast<std::chrono::system_clock::duration>(lookAroundStartTime)
@@ -3617,8 +3617,8 @@ int32_t main(int32_t argc, char **argv) {
 
                         std::chrono::duration<double> elapsed;
                         if ( has_possibleInterrupt && has_possibleInterrupt_dynamic ){
-                            std::chrono::duration<double> e1 = obsStaticStartTime - targetFindingStartTime;
-                            std::chrono::duration<double> e2 = obsDynamicStartTime - targetFindingStartTime;
+                            std::chrono::duration<double> e1 = obsStaticStartTime - lookAroundStartTime;
+                            std::chrono::duration<double> e2 = obsDynamicStartTime - lookAroundStartTime;
                             if ( e1.count() > e2.count() ){
                                 elapsed = e1;
                             }
@@ -3627,9 +3627,9 @@ int32_t main(int32_t argc, char **argv) {
                             }
                         }
                         else if ( has_possibleInterrupt )
-                            elapsed = obsStaticStartTime - targetFindingStartTime;
+                            elapsed = obsStaticStartTime - lookAroundStartTime;
                         else if ( has_possibleInterrupt_dynamic )
-                            elapsed = obsDynamicStartTime - targetFindingStartTime;
+                            elapsed = obsDynamicStartTime - lookAroundStartTime;
             
                         auto start_time_t = std::chrono::system_clock::to_time_t(
                             std::chrono::time_point_cast<std::chrono::system_clock::duration>(lookAroundStartTime)
@@ -3843,8 +3843,8 @@ int32_t main(int32_t argc, char **argv) {
 
                         std::chrono::duration<double> elapsed;
                         if ( has_possibleInterrupt && has_possibleInterrupt_dynamic ){
-                            std::chrono::duration<double> e1 = obsStaticStartTime - targetFindingStartTime;
-                            std::chrono::duration<double> e2 = obsDynamicStartTime - targetFindingStartTime;
+                            std::chrono::duration<double> e1 = obsStaticStartTime - lookAroundStartTime;
+                            std::chrono::duration<double> e2 = obsDynamicStartTime - lookAroundStartTime;
                             if ( e1.count() > e2.count() ){
                                 elapsed = e1;
                             }
@@ -3853,9 +3853,9 @@ int32_t main(int32_t argc, char **argv) {
                             }
                         }
                         else if ( has_possibleInterrupt )
-                            elapsed = obsStaticStartTime - targetFindingStartTime;
+                            elapsed = obsStaticStartTime - lookAroundStartTime;
                         else if ( has_possibleInterrupt_dynamic )
-                            elapsed = obsDynamicStartTime - targetFindingStartTime;
+                            elapsed = obsDynamicStartTime - lookAroundStartTime;
             
                         auto start_time_t = std::chrono::system_clock::to_time_t(
                             std::chrono::time_point_cast<std::chrono::system_clock::duration>(lookAroundStartTime)
