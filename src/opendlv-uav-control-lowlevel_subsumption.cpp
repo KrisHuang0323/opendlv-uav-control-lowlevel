@@ -130,38 +130,23 @@ int32_t main(int32_t argc, char **argv) {
  
      // Handler to receive distance readings (realized as C++ lambda).
     //  std::mutex distancesMutex;     
-     struct sensorReadStruct{
-        std::atomic<float> front{0};
-        std::atomic<float> rear{0};
-        std::atomic<float> left{0};
-        std::atomic<float> right{0};
-        std::atomic<float> cur_state_yaw{0.0f};
-        std::atomic<float> cur_state_battery_state{0.0f};
-        std::atomic<float> dist_target{-1.0f};
-        std::atomic<float> dist_obs{-1.0f};
-        std::atomic<float> dist_chpad{-1.0f};
-        std::atomic<float> aimDirection_target{-4.0f};
-        std::atomic<float> aimDirection_obs{-4.0f};
-        std::atomic<float> aimDirection_chpad{-4.0f};
-        std::atomic<float> closeBallTimer{0.0f};
-        std::atomic<int16_t> closeBallCount{0}; 
-        std::atomic<float> closeStaticObsTimer{0.0f};
-        std::atomic<int16_t> closeStaticObsCount{0}; 
-        std::atomic<int16_t> nTargetTimer{0};
-        std::atomic<int16_t> is_chpad_found{0};  
-     };
-     sensorReadStruct cur_sensorReadStruct;
-     auto onDistance = [&cur_sensorReadStruct](cluon::data::Envelope &&env){
+     // Handler to receive distance readings (realized as C++ lambda).
+     std::mutex distancesMutex;
+     std::atomic<float> front{0};
+     std::atomic<float> rear{0};
+     std::atomic<float> left{0};
+     std::atomic<float> right{0};
+     auto onDistance = [&distancesMutex, &front, &rear, &left, &right](cluon::data::Envelope &&env){
          auto senderStamp = env.senderStamp();
          // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
          opendlv::proxy::DistanceReading dr = cluon::extractMessage<opendlv::proxy::DistanceReading>(std::move(env));
          // Store distance readings.
         //  std::lock_guard<std::mutex> lck(distancesMutex);
          switch (senderStamp) {
-             case 0: cur_sensorReadStruct.front = dr.distance(); break;
-             case 1: cur_sensorReadStruct.rear = dr.distance(); break;
-             case 2: cur_sensorReadStruct.left = dr.distance(); break;
-             case 3: cur_sensorReadStruct.right = dr.distance(); break;
+             case 0: front = dr.distance(); break;
+             case 1: rear = dr.distance(); break;
+             case 2: left = dr.distance(); break;
+             case 3: right = dr.distance(); break;
          }
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
@@ -172,22 +157,27 @@ int32_t main(int32_t argc, char **argv) {
     //     std::atomic<float> yaw{0.0f};
     //     std::atomic<float> battery_state{0.0f};
     //  };
-    //  std::mutex stateMutex;
-     auto onStateRead = [&cur_sensorReadStruct](cluon::data::Envelope &&env){
+     std::mutex stateMutex;
+     std::atomic<float> cur_state_yaw{0.0f};
+     std::atomic<float> cur_state_battery_state{0.0f};
+     auto onStateRead = [&cur_state_yaw, &cur_state_battery_state](cluon::data::Envelope &&env){
          auto senderStamp = env.senderStamp();
          // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
          opendlv::logic::sensation::CrazyFlieState cfState = cluon::extractMessage<opendlv::logic::sensation::CrazyFlieState>(std::move(env));
          // Store distance readings.
         //  std::lock_guard<std::mutex> lck(stateMutex);
-        cur_sensorReadStruct.cur_state_yaw = cfState.cur_yaw();
-        cur_sensorReadStruct.cur_state_battery_state = cfState.battery_state();
+        cur_state_yaw = cfState.cur_yaw();
+        cur_state_battery_state = cfState.battery_state();
         //  std::cout <<" Current angle: " <<  cur_state_r.yaw << std::endl; 
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
      od4->dataTrigger(opendlv::logic::sensation::CrazyFlieState::ID(), onStateRead);
  
-    //  std::mutex distMutex;
-     auto onDistRead = [&cur_sensorReadStruct](cluon::data::Envelope &&env){
+     std::atomic<float> dist_target{-1.0f};
+     std::atomic<float> dist_obs{-1.0f};
+     std::atomic<float> dist_chpad{-1.0f};
+     std::mutex distMutex;
+     auto onDistRead = [&distMutex, &dist_target, &dist_obs, &dist_chpad](cluon::data::Envelope &&env){
          auto senderStamp = env.senderStamp();
          // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
          opendlv::logic::action::PreviewPoint pPtmessage = cluon::extractMessage<opendlv::logic::action::PreviewPoint>(std::move(env));
@@ -195,20 +185,23 @@ int32_t main(int32_t argc, char **argv) {
          // Store distance readings.
         //  std::lock_guard<std::mutex> lck(distMutex);
          if ( senderStamp == 0 ){
-            cur_sensorReadStruct.dist_target = pPtmessage.distance();
+             dist_target = pPtmessage.distance();
          }
          else if ( senderStamp == 1 ){
-            cur_sensorReadStruct.dist_obs = pPtmessage.distance();
+             dist_obs = pPtmessage.distance();
          }
          else if ( senderStamp == 2 ){
-            cur_sensorReadStruct.dist_chpad = pPtmessage.distance();
+             dist_chpad = pPtmessage.distance();
          }
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
      od4->dataTrigger(opendlv::logic::action::PreviewPoint::ID(), onDistRead);
  
-    //  std::mutex aimDirectionMutex;
-     auto onAimDirectionRead = [&cur_sensorReadStruct](cluon::data::Envelope &&env){
+     std::atomic<float> aimDirection_target{-4.0f};
+     std::atomic<float> aimDirection_obs{-4.0f};
+     std::atomic<float> aimDirection_chpad{-4.0f};
+     std::mutex aimDirectionMutex;
+     auto onAimDirectionRead = [&aimDirectionMutex, &aimDirection_target, &aimDirection_obs, &aimDirection_chpad](cluon::data::Envelope &&env){
          auto senderStamp = env.senderStamp();
          // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
          opendlv::logic::action::AimDirection aDirmessage = cluon::extractMessage<opendlv::logic::action::AimDirection>(std::move(env));
@@ -216,19 +209,25 @@ int32_t main(int32_t argc, char **argv) {
          // Store aim direction readings.
         //  std::lock_guard<std::mutex> lck(aimDirectionMutex);
          if ( senderStamp == 0 ){
-            cur_sensorReadStruct.aimDirection_target = aDirmessage.azimuthAngle();
+             aimDirection_target = aDirmessage.azimuthAngle();
          }
          else if ( senderStamp == 1 ){
-            cur_sensorReadStruct.aimDirection_obs = aDirmessage.azimuthAngle();
+             aimDirection_obs = aDirmessage.azimuthAngle();
          }
          else if ( senderStamp == 2 ){
-            cur_sensorReadStruct.aimDirection_chpad = aDirmessage.azimuthAngle();
+             aimDirection_chpad = aDirmessage.azimuthAngle();
          }
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
      od4->dataTrigger(opendlv::logic::action::AimDirection::ID(), onAimDirectionRead);
- 
-     auto onRewardRecordRead = [&cur_sensorReadStruct](cluon::data::Envelope &&env){
+
+     std::atomic<float> closeBallTimer{0.0f};
+     std::atomic<int16_t> closeBallCount{0}; 
+     std::atomic<float> closeStaticObsTimer{0.0f};
+     std::atomic<int16_t> closeStaticObsCount{0}; 
+     std::atomic<int16_t> nTargetTimer{0};
+     std::atomic<int16_t> is_chpad_found{0};   
+     auto onRewardRecordRead = [&nTargetTimer, &is_chpad_found, &closeBallTimer, &closeBallCount, &closeStaticObsTimer, &closeStaticObsCount](cluon::data::Envelope &&env){
          auto senderStamp = env.senderStamp();
          // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
          opendlv::logic::sensation::RewardRecord rRecordmessage = cluon::extractMessage<opendlv::logic::sensation::RewardRecord>(std::move(env));
@@ -236,12 +235,12 @@ int32_t main(int32_t argc, char **argv) {
          // Store aim direction readings.
         //  std::lock_guard<std::mutex> lck(aimDirectionMutex);
          if ( senderStamp == 0 ){
-            cur_sensorReadStruct.closeBallTimer = rRecordmessage.too_close_ball_timer();
-            cur_sensorReadStruct.closeBallCount = rRecordmessage.too_close_ball_count();
-            cur_sensorReadStruct.closeStaticObsTimer = rRecordmessage.too_close_staticobs_timer();
-            cur_sensorReadStruct.closeStaticObsCount = rRecordmessage.too_close_staticobs_count();
-            cur_sensorReadStruct.nTargetTimer = rRecordmessage.target_found_count();
-            cur_sensorReadStruct.is_chpad_found = rRecordmessage.is_chpad_found();
+            closeBallTimer = rRecordmessage.too_close_ball_timer();
+            closeBallCount = rRecordmessage.too_close_ball_count();
+            closeStaticObsTimer = rRecordmessage.too_close_staticobs_timer();
+            closeStaticObsCount = rRecordmessage.too_close_staticobs_count();
+            nTargetTimer = rRecordmessage.target_found_count();
+            is_chpad_found = rRecordmessage.is_chpad_found();
          }
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
@@ -446,60 +445,25 @@ int32_t main(int32_t argc, char **argv) {
     std::atomic<bool> isTerminateThread{false};
 
     // Take off first
-    while ( cur_sensorReadStruct.cur_state_battery_state <= takeoff_batterythreshold ){
+    while ( cur_state_battery_state <= takeoff_batterythreshold ){
         std::cout <<" Battery is too low for taking off..." << std::endl;
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-    Takeoff(od4, 1.0f, 3);
+    Takeoff(od4, 1.5f, 3);
     taskStartTime = std::chrono::high_resolution_clock::now();
 
     // Thread for valid direction check
     std::thread ValidRangeCheckTask([od4, &isTerminateThread,
-                                    &cur_sensorReadStruct,
+                                    &front, &rear, &left, &right,
+                                    &cur_state_yaw, &cur_state_battery_state,
+                                    &dist_target, &dist_obs, &dist_chpad,
+                                    &aimDirection_target, &aimDirection_obs, &aimDirection_chpad,
+                                    &closeBallTimer, &closeBallCount, &closeStaticObsTimer, &closeStaticObsCount,
+                                    &nTargetTimer, &is_chpad_found,
                                     &validRangeMutex, &cur_validRangeStruct,
                                     &lookAroundMutex, &cur_lookAroundStruct]() {
         while( od4->isRunning() && isTerminateThread == false ){
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
-
-            // Variables for sensor read
-            float front{0};
-            float rear{0};
-            float left{0};
-            float right{0};
-            float cur_state_yaw{0.0f};
-            float cur_state_battery_state{0.0f};
-            float dist_target{-1.0f};
-            float dist_obs{-1.0f};
-            float dist_chpad{-1.0f};
-            float aimDirection_target{-4.0f};
-            float aimDirection_obs{-4.0f};
-            float aimDirection_chpad{-4.0f};
-            float closeBallTimer{0.0f};
-            int16_t closeBallCount{0}; 
-            float closeStaticObsTimer{0.0f};
-            int16_t closeStaticObsCount{0}; 
-            int16_t nTargetTimer{0};
-            int16_t is_chpad_found{0}; 
-            {
-                front = cur_sensorReadStruct.front;
-                rear = cur_sensorReadStruct.rear;
-                left = cur_sensorReadStruct.left;
-                right = cur_sensorReadStruct.right;
-                cur_state_yaw = cur_sensorReadStruct.cur_state_yaw;
-                cur_state_battery_state = cur_sensorReadStruct.cur_state_battery_state;
-                dist_target = cur_sensorReadStruct.dist_target;
-                dist_obs = cur_sensorReadStruct.dist_obs;
-                dist_chpad = cur_sensorReadStruct.dist_chpad;
-                aimDirection_target = cur_sensorReadStruct.aimDirection_target;
-                aimDirection_obs = cur_sensorReadStruct.aimDirection_obs;
-                aimDirection_chpad = cur_sensorReadStruct.aimDirection_chpad;
-                closeBallTimer = cur_sensorReadStruct.closeBallTimer;
-                closeBallCount = cur_sensorReadStruct.closeBallCount;
-                closeStaticObsTimer = cur_sensorReadStruct.closeStaticObsTimer;
-                closeStaticObsCount = cur_sensorReadStruct.closeStaticObsCount; 
-                nTargetTimer = cur_sensorReadStruct.nTargetTimer;
-                is_chpad_found = cur_sensorReadStruct.is_chpad_found;
-            }
 
             // Variables for valid range
             std::vector<distPathState> distPathstate_vec;
@@ -689,51 +653,16 @@ int32_t main(int32_t argc, char **argv) {
     });
 
     std::thread StuckEscapeTask([od4, &isTerminateThread,
-                                 &cur_sensorReadStruct,
+                                 &front, &rear, &left, &right,
+                                 &cur_state_yaw, &cur_state_battery_state,
+                                 &dist_target, &dist_obs, &dist_chpad,
+                                 &aimDirection_target, &aimDirection_obs, &aimDirection_chpad,
+                                 &closeBallTimer, &closeBallCount, &closeStaticObsTimer, &closeStaticObsCount,
+                                 &nTargetTimer, &is_chpad_found,
                                  &stuckEscapeMutex, &cur_stuckEscapeStruct,
                                  &dynamicObsMutex, &cur_dynamicObsStruct](){
         while( od4->isRunning() && isTerminateThread == false ){
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
-
-            // Variables here            
-            float front{0};
-            float rear{0};
-            float left{0};
-            float right{0};
-            float cur_state_yaw{0.0f};
-            float cur_state_battery_state{0.0f};
-            float dist_target{-1.0f};
-            float dist_obs{-1.0f};
-            float dist_chpad{-1.0f};
-            float aimDirection_target{-4.0f};
-            float aimDirection_obs{-4.0f};
-            float aimDirection_chpad{-4.0f};
-            float closeBallTimer{0.0f};
-            int16_t closeBallCount{0}; 
-            float closeStaticObsTimer{0.0f};
-            int16_t closeStaticObsCount{0}; 
-            int16_t nTargetTimer{0};
-            int16_t is_chpad_found{0}; 
-            {
-                front = cur_sensorReadStruct.front;
-                rear = cur_sensorReadStruct.rear;
-                left = cur_sensorReadStruct.left;
-                right = cur_sensorReadStruct.right;
-                cur_state_yaw = cur_sensorReadStruct.cur_state_yaw;
-                cur_state_battery_state = cur_sensorReadStruct.cur_state_battery_state;
-                dist_target = cur_sensorReadStruct.dist_target;
-                dist_obs = cur_sensorReadStruct.dist_obs;
-                dist_chpad = cur_sensorReadStruct.dist_chpad;
-                aimDirection_target = cur_sensorReadStruct.aimDirection_target;
-                aimDirection_obs = cur_sensorReadStruct.aimDirection_obs;
-                aimDirection_chpad = cur_sensorReadStruct.aimDirection_chpad;
-                closeBallTimer = cur_sensorReadStruct.closeBallTimer;
-                closeBallCount = cur_sensorReadStruct.closeBallCount;
-                closeStaticObsTimer = cur_sensorReadStruct.closeStaticObsTimer;
-                closeStaticObsCount = cur_sensorReadStruct.closeStaticObsCount; 
-                nTargetTimer = cur_sensorReadStruct.nTargetTimer;
-                is_chpad_found = cur_sensorReadStruct.is_chpad_found;
-            }
 
             int nFrontReachingTimer = 0;
             int nStuckEscapeCount = 0;
@@ -842,53 +771,19 @@ int32_t main(int32_t argc, char **argv) {
     });
 
     std::thread StaticObsDodgeTask([od4, &isTerminateThread,
-                                    &cur_sensorReadStruct, &cur_constVarStruct,
+                                    &front, &rear, &left, &right,
+                                    &cur_state_yaw, &cur_state_battery_state,
+                                    &dist_target, &dist_obs, &dist_chpad,
+                                    &aimDirection_target, &aimDirection_obs, &aimDirection_chpad,
+                                    &closeBallTimer, &closeBallCount, &closeStaticObsTimer, &closeStaticObsCount,
+                                    &nTargetTimer, &is_chpad_found,
+                                    &cur_constVarStruct,
                                     &suppressMutex, &cur_suppressStruct,
                                     &validRangeMutex, &cur_validRangeStruct,
                                     &staticObsMutex, &cur_staticObsStruct,
                                     &dynamicObsMutex, &cur_dynamicObsStruct](){
         while( od4->isRunning() && isTerminateThread == false ){
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
-
-            // Variables here        
-            float front{0};
-            float rear{0};
-            float left{0};
-            float right{0};
-            float cur_state_yaw{0.0f};
-            float cur_state_battery_state{0.0f};
-            float dist_target{-1.0f};
-            float dist_obs{-1.0f};
-            float dist_chpad{-1.0f};
-            float aimDirection_target{-4.0f};
-            float aimDirection_obs{-4.0f};
-            float aimDirection_chpad{-4.0f};
-            float closeBallTimer{0.0f};
-            int16_t closeBallCount{0}; 
-            float closeStaticObsTimer{0.0f};
-            int16_t closeStaticObsCount{0}; 
-            int16_t nTargetTimer{0};
-            int16_t is_chpad_found{0}; 
-            {
-                front = cur_sensorReadStruct.front;
-                rear = cur_sensorReadStruct.rear;
-                left = cur_sensorReadStruct.left;
-                right = cur_sensorReadStruct.right;
-                cur_state_yaw = cur_sensorReadStruct.cur_state_yaw;
-                cur_state_battery_state = cur_sensorReadStruct.cur_state_battery_state;
-                dist_target = cur_sensorReadStruct.dist_target;
-                dist_obs = cur_sensorReadStruct.dist_obs;
-                dist_chpad = cur_sensorReadStruct.dist_chpad;
-                aimDirection_target = cur_sensorReadStruct.aimDirection_target;
-                aimDirection_obs = cur_sensorReadStruct.aimDirection_obs;
-                aimDirection_chpad = cur_sensorReadStruct.aimDirection_chpad;
-                closeBallTimer = cur_sensorReadStruct.closeBallTimer;
-                closeBallCount = cur_sensorReadStruct.closeBallCount;
-                closeStaticObsTimer = cur_sensorReadStruct.closeStaticObsTimer;
-                closeStaticObsCount = cur_sensorReadStruct.closeStaticObsCount; 
-                nTargetTimer = cur_sensorReadStruct.nTargetTimer;
-                is_chpad_found = cur_sensorReadStruct.is_chpad_found;
-            }
 
             // Variables for constant
             float safe_endreach_ultimate_dist{0.0f};
@@ -1519,7 +1414,12 @@ int32_t main(int32_t argc, char **argv) {
 
     std::thread DynamicObsDodgeTask([od4, &isTerminateThread,
                                      &suppressMutex, &cur_suppressStruct,
-                                     &cur_sensorReadStruct, 
+                                     &front, &rear, &left, &right,
+                                     &cur_state_yaw, &cur_state_battery_state,
+                                     &dist_target, &dist_obs, &dist_chpad,
+                                     &aimDirection_target, &aimDirection_obs, &aimDirection_chpad,
+                                     &closeBallTimer, &closeBallCount, &closeStaticObsTimer, &closeStaticObsCount,
+                                     &nTargetTimer, &is_chpad_found,
                                      &cur_constVarStruct,
                                      &validRangeMutex, &cur_validRangeStruct,
                                      &staticObsMutex, &cur_staticObsStruct,
@@ -1533,47 +1433,6 @@ int32_t main(int32_t argc, char **argv) {
             }   // Wait until the domination change to the dynamic obstacle domination
 
             // std::cout << "I am in the dynamic obs task!" << std::endl;
-          
-            // Variables here        
-            float front{0};
-            float rear{0};
-            float left{0};
-            float right{0};
-            float cur_state_yaw{0.0f};
-            float cur_state_battery_state{0.0f};
-            float dist_target{-1.0f};
-            float dist_obs{-1.0f};
-            float dist_chpad{-1.0f};
-            float aimDirection_target{-4.0f};
-            float aimDirection_obs{-4.0f};
-            float aimDirection_chpad{-4.0f};
-            float closeBallTimer{0.0f};
-            int16_t closeBallCount{0}; 
-            float closeStaticObsTimer{0.0f};
-            int16_t closeStaticObsCount{0}; 
-            int16_t nTargetTimer{0};
-            int16_t is_chpad_found{0}; 
-            {
-                front = cur_sensorReadStruct.front;
-                rear = cur_sensorReadStruct.rear;
-                left = cur_sensorReadStruct.left;
-                right = cur_sensorReadStruct.right;
-                cur_state_yaw = cur_sensorReadStruct.cur_state_yaw;
-                cur_state_battery_state = cur_sensorReadStruct.cur_state_battery_state;
-                dist_target = cur_sensorReadStruct.dist_target;
-                dist_obs = cur_sensorReadStruct.dist_obs;
-                dist_chpad = cur_sensorReadStruct.dist_chpad;
-                aimDirection_target = cur_sensorReadStruct.aimDirection_target;
-                aimDirection_obs = cur_sensorReadStruct.aimDirection_obs;
-                aimDirection_chpad = cur_sensorReadStruct.aimDirection_chpad;
-                closeBallTimer = cur_sensorReadStruct.closeBallTimer;
-                closeBallCount = cur_sensorReadStruct.closeBallCount;
-                closeStaticObsTimer = cur_sensorReadStruct.closeStaticObsTimer;
-                closeStaticObsCount = cur_sensorReadStruct.closeStaticObsCount; 
-                nTargetTimer = cur_sensorReadStruct.nTargetTimer;
-                is_chpad_found = cur_sensorReadStruct.is_chpad_found;
-            }
-
             // Variables for constant
             float safe_endreach_ultimate_dist{0.0f};
             float safe_endreach_dist{0.0f};
@@ -2089,7 +1948,12 @@ int32_t main(int32_t argc, char **argv) {
 
     std::thread TargetFindingTask([od4, &isTerminateThread,
                                     &suppressMutex, &cur_suppressStruct,
-                                    &cur_sensorReadStruct, 
+                                    &front, &rear, &left, &right,
+                                    &cur_state_yaw, &cur_state_battery_state,
+                                    &dist_target, &dist_obs, &dist_chpad,
+                                    &aimDirection_target, &aimDirection_obs, &aimDirection_chpad,
+                                    &closeBallTimer, &closeBallCount, &closeStaticObsTimer, &closeStaticObsCount,
+                                    &nTargetTimer, &is_chpad_found,
                                     &cur_constVarStruct,
                                     &validRangeMutex, &cur_validRangeStruct,
                                     &staticObsMutex, &cur_staticObsStruct,
@@ -2107,46 +1971,6 @@ int32_t main(int32_t argc, char **argv) {
 
 
             // std::cout << "I am in the target finding task!" << std::endl;
-
-            // Variables here        
-            float front{0};
-            float rear{0};
-            float left{0};
-            float right{0};
-            float cur_state_yaw{0.0f};
-            float cur_state_battery_state{0.0f};
-            float dist_target{-1.0f};
-            float dist_obs{-1.0f};
-            float dist_chpad{-1.0f};
-            float aimDirection_target{-4.0f};
-            float aimDirection_obs{-4.0f};
-            float aimDirection_chpad{-4.0f};
-            float closeBallTimer{0.0f};
-            int16_t closeBallCount{0}; 
-            float closeStaticObsTimer{0.0f};
-            int16_t closeStaticObsCount{0}; 
-            int16_t nTargetTimer{0};
-            int16_t is_chpad_found{0}; 
-            {
-                front = cur_sensorReadStruct.front;
-                rear = cur_sensorReadStruct.rear;
-                left = cur_sensorReadStruct.left;
-                right = cur_sensorReadStruct.right;
-                cur_state_yaw = cur_sensorReadStruct.cur_state_yaw;
-                cur_state_battery_state = cur_sensorReadStruct.cur_state_battery_state;
-                dist_target = cur_sensorReadStruct.dist_target;
-                dist_obs = cur_sensorReadStruct.dist_obs;
-                dist_chpad = cur_sensorReadStruct.dist_chpad;
-                aimDirection_target = cur_sensorReadStruct.aimDirection_target;
-                aimDirection_obs = cur_sensorReadStruct.aimDirection_obs;
-                aimDirection_chpad = cur_sensorReadStruct.aimDirection_chpad;
-                closeBallTimer = cur_sensorReadStruct.closeBallTimer;
-                closeBallCount = cur_sensorReadStruct.closeBallCount;
-                closeStaticObsTimer = cur_sensorReadStruct.closeStaticObsTimer;
-                closeStaticObsCount = cur_sensorReadStruct.closeStaticObsCount; 
-                nTargetTimer = cur_sensorReadStruct.nTargetTimer;
-                is_chpad_found = cur_sensorReadStruct.is_chpad_found;
-            }
 
             // Variables for constant
             float safe_endreach_ultimate_dist{0.0f};
@@ -2498,13 +2322,13 @@ int32_t main(int32_t argc, char **argv) {
                                 float angTurn = 90.0f / 180.0f * M_PI - angDev;
                                 cur_targetCheckState.ang_toTurn = angTurn;
                                 cur_targetCheckState.startAngle = cur_state_yaw;    
-                                Goto(od4, 0.0f, 0.0f, 0.0f, angTurn + 10.0f / 180.0f * M_PI, 2);                             
+                                Goto(od4, 0.0f, 0.0f, 0.0f, angTurn + 10.0f / 180.0f * M_PI, 4);                             
                             }
                             else{
                                 float angTurn = - ( 90.0f / 180.0f * M_PI - angDev );
                                 cur_targetCheckState.ang_toTurn = angTurn;
                                 cur_targetCheckState.startAngle = cur_state_yaw;    
-                                Goto(od4, 0.0f, 0.0f, 0.0f, angTurn - 10.0f / 180.0f * M_PI, 2);          
+                                Goto(od4, 0.0f, 0.0f, 0.0f, angTurn - 10.0f / 180.0f * M_PI, 4);          
                             } 
                             on_TURNING_MODE = true;
                             cur_targetCheckState.oriAimDirection = aimDirection_to_reach;
@@ -2619,7 +2443,7 @@ int32_t main(int32_t argc, char **argv) {
                                 if ( angleDifference( cur_state_yaw, pair_cand.angle ) < 0.0f ){
                                     angTurn -= 10.0f / 180.0f * M_PI;
                                 }
-                                Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 1);
+                                Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 2);
                                 cur_targetCheckState.turnStarted = true;
                                 break;
                             }
@@ -2680,7 +2504,7 @@ int32_t main(int32_t argc, char **argv) {
                             if ( angleDifference( yaw, cur_targetCheckState.targetAngle ) < 0.0f ){
                                 angTurn -= 10.0f / 180.0f * M_PI;
                             }
-                            Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 1); 
+                            Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 2); 
                             on_TURNING_MODE = true; 
                             
                             // Set variables back
@@ -2857,7 +2681,12 @@ int32_t main(int32_t argc, char **argv) {
 
     std::thread FrontReachingTask([od4, &isTerminateThread,
                                     &suppressMutex, &cur_suppressStruct,
-                                    &cur_sensorReadStruct, 
+                                    &front, &rear, &left, &right,
+                                    &cur_state_yaw, &cur_state_battery_state,
+                                    &dist_target, &dist_obs, &dist_chpad,
+                                    &aimDirection_target, &aimDirection_obs, &aimDirection_chpad,
+                                    &closeBallTimer, &closeBallCount, &closeStaticObsTimer, &closeStaticObsCount,
+                                    &nTargetTimer, &is_chpad_found,
                                     &cur_constVarStruct,
                                     &validRangeMutex, &cur_validRangeStruct,
                                     &staticObsMutex, &cur_staticObsStruct,
@@ -2875,46 +2704,6 @@ int32_t main(int32_t argc, char **argv) {
             }   // Wait until the domination change to target finding
 
             // std::cout << "I am in the front reaching task!" << std::endl;
-
-            // Variables here        
-            float front{0};
-            float rear{0};
-            float left{0};
-            float right{0};
-            float cur_state_yaw{0.0f};
-            float cur_state_battery_state{0.0f};
-            float dist_target{-1.0f};
-            float dist_obs{-1.0f};
-            float dist_chpad{-1.0f};
-            float aimDirection_target{-4.0f};
-            float aimDirection_obs{-4.0f};
-            float aimDirection_chpad{-4.0f};
-            float closeBallTimer{0.0f};
-            int16_t closeBallCount{0}; 
-            float closeStaticObsTimer{0.0f};
-            int16_t closeStaticObsCount{0}; 
-            int16_t nTargetTimer{0};
-            int16_t is_chpad_found{0}; 
-            {
-                front = cur_sensorReadStruct.front;
-                rear = cur_sensorReadStruct.rear;
-                left = cur_sensorReadStruct.left;
-                right = cur_sensorReadStruct.right;
-                cur_state_yaw = cur_sensorReadStruct.cur_state_yaw;
-                cur_state_battery_state = cur_sensorReadStruct.cur_state_battery_state;
-                dist_target = cur_sensorReadStruct.dist_target;
-                dist_obs = cur_sensorReadStruct.dist_obs;
-                dist_chpad = cur_sensorReadStruct.dist_chpad;
-                aimDirection_target = cur_sensorReadStruct.aimDirection_target;
-                aimDirection_obs = cur_sensorReadStruct.aimDirection_obs;
-                aimDirection_chpad = cur_sensorReadStruct.aimDirection_chpad;
-                closeBallTimer = cur_sensorReadStruct.closeBallTimer;
-                closeBallCount = cur_sensorReadStruct.closeBallCount;
-                closeStaticObsTimer = cur_sensorReadStruct.closeStaticObsTimer;
-                closeStaticObsCount = cur_sensorReadStruct.closeStaticObsCount; 
-                nTargetTimer = cur_sensorReadStruct.nTargetTimer;
-                is_chpad_found = cur_sensorReadStruct.is_chpad_found;
-            }
 
             // Variables for constant
             float safe_endreach_ultimate_dist{0.0f};
@@ -3308,7 +3097,12 @@ int32_t main(int32_t argc, char **argv) {
 
     std::thread LookAroundTask([od4, &isTerminateThread,
                                 &suppressMutex, &cur_suppressStruct,
-                                &cur_sensorReadStruct, 
+                                &front, &rear, &left, &right,
+                                &cur_state_yaw, &cur_state_battery_state,
+                                &dist_target, &dist_obs, &dist_chpad,
+                                &aimDirection_target, &aimDirection_obs, &aimDirection_chpad,
+                                &closeBallTimer, &closeBallCount, &closeStaticObsTimer, &closeStaticObsCount,
+                                &nTargetTimer, &is_chpad_found,
                                 &cur_constVarStruct,
                                 &validRangeMutex, &cur_validRangeStruct,
                                 &staticObsMutex, &cur_staticObsStruct,
@@ -3326,46 +3120,6 @@ int32_t main(int32_t argc, char **argv) {
             }   // Wait until the domination change to target finding
 
             // std::cout << "I am in the look around task!" << std::endl;
-
-            // Variables here        
-            float front{0};
-            float rear{0};
-            float left{0};
-            float right{0};
-            float cur_state_yaw{0.0f};
-            float cur_state_battery_state{0.0f};
-            float dist_target{-1.0f};
-            float dist_obs{-1.0f};
-            float dist_chpad{-1.0f};
-            float aimDirection_target{-4.0f};
-            float aimDirection_obs{-4.0f};
-            float aimDirection_chpad{-4.0f};
-            float closeBallTimer{0.0f};
-            int16_t closeBallCount{0}; 
-            float closeStaticObsTimer{0.0f};
-            int16_t closeStaticObsCount{0}; 
-            int16_t nTargetTimer{0};
-            int16_t is_chpad_found{0}; 
-            {
-                front = cur_sensorReadStruct.front;
-                rear = cur_sensorReadStruct.rear;
-                left = cur_sensorReadStruct.left;
-                right = cur_sensorReadStruct.right;
-                cur_state_yaw = cur_sensorReadStruct.cur_state_yaw;
-                cur_state_battery_state = cur_sensorReadStruct.cur_state_battery_state;
-                dist_target = cur_sensorReadStruct.dist_target;
-                dist_obs = cur_sensorReadStruct.dist_obs;
-                dist_chpad = cur_sensorReadStruct.dist_chpad;
-                aimDirection_target = cur_sensorReadStruct.aimDirection_target;
-                aimDirection_obs = cur_sensorReadStruct.aimDirection_obs;
-                aimDirection_chpad = cur_sensorReadStruct.aimDirection_chpad;
-                closeBallTimer = cur_sensorReadStruct.closeBallTimer;
-                closeBallCount = cur_sensorReadStruct.closeBallCount;
-                closeStaticObsTimer = cur_sensorReadStruct.closeStaticObsTimer;
-                closeStaticObsCount = cur_sensorReadStruct.closeStaticObsCount; 
-                nTargetTimer = cur_sensorReadStruct.nTargetTimer;
-                is_chpad_found = cur_sensorReadStruct.is_chpad_found;
-            }
 
             // Variables for constant
             float safe_endreach_ultimate_dist{0.0f};
@@ -4003,7 +3757,7 @@ int32_t main(int32_t argc, char **argv) {
                                 if ( angleDifference( cur_state_yaw, pair_cand.angle ) < 0.0f ){
                                     angTurn -= 10.0f / 180.0f * M_PI;
                                 }
-                                Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 3);
+                                Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 1);
                                 std::cout <<" Found a path to go to and start turning to target angle with target: " << pair_cand.angle << std::endl;
                                 break;
                             }
@@ -4043,6 +3797,10 @@ int32_t main(int32_t argc, char **argv) {
                     }
 
                     cur_pathReachingState.pathReadyToGo = true;
+                    {
+                        std::lock_guard<std::mutex> lck(suppressMutex);
+                        cur_suppressStruct.isFrontReachingDominating = true;
+                    }
                     ori_front = front;
 
                     // Record ranges
@@ -4114,46 +3872,6 @@ int32_t main(int32_t argc, char **argv) {
     // Check Landing in the main loop
     while( od4->isRunning() ){ 
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
-
-        // Variables here     
-        float front{0};
-        float rear{0};
-        float left{0};
-        float right{0};
-        float cur_state_yaw{0.0f};
-        float cur_state_battery_state{0.0f};
-        float dist_target{-1.0f};
-        float dist_obs{-1.0f};
-        float dist_chpad{-1.0f};
-        float aimDirection_target{-4.0f};
-        float aimDirection_obs{-4.0f};
-        float aimDirection_chpad{-4.0f};
-        float closeBallTimer{0.0f};
-        int16_t closeBallCount{0}; 
-        float closeStaticObsTimer{0.0f};
-        int16_t closeStaticObsCount{0}; 
-        int16_t nTargetTimer{0};
-        int16_t is_chpad_found{0}; 
-        {
-            front = cur_sensorReadStruct.front;
-            rear = cur_sensorReadStruct.rear;
-            left = cur_sensorReadStruct.left;
-            right = cur_sensorReadStruct.right;
-            cur_state_yaw = cur_sensorReadStruct.cur_state_yaw;
-            cur_state_battery_state = cur_sensorReadStruct.cur_state_battery_state;
-            dist_target = cur_sensorReadStruct.dist_target;
-            dist_obs = cur_sensorReadStruct.dist_obs;
-            dist_chpad = cur_sensorReadStruct.dist_chpad;
-            aimDirection_target = cur_sensorReadStruct.aimDirection_target;
-            aimDirection_obs = cur_sensorReadStruct.aimDirection_obs;
-            aimDirection_chpad = cur_sensorReadStruct.aimDirection_chpad;
-            closeBallTimer = cur_sensorReadStruct.closeBallTimer;
-            closeBallCount = cur_sensorReadStruct.closeBallCount;
-            closeStaticObsTimer = cur_sensorReadStruct.closeStaticObsTimer;
-            closeStaticObsCount = cur_sensorReadStruct.closeStaticObsCount; 
-            nTargetTimer = cur_sensorReadStruct.nTargetTimer;
-            is_chpad_found = cur_sensorReadStruct.is_chpad_found;
-        }
 
         // Variables for constant
         float safe_endreach_ultimate_dist{0.0f};

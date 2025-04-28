@@ -413,7 +413,7 @@
          */
          if ( hasTakeoff == false ){
              if ( cur_state_battery_state > takeoff_batterythreshold ){
-                 Takeoff(od4, 1.0f, 3);
+                 Takeoff(od4, 1.5f, 3);
                  hasTakeoff = true;
                  taskStartTime = std::chrono::high_resolution_clock::now();
              }
@@ -1285,13 +1285,13 @@
                              float angTurn = 90.0f / 180.0f * M_PI - angDev;
                              cur_targetCheckState.ang_toTurn = angTurn;
                              cur_targetCheckState.startAngle = cur_state_yaw;    
-                             Goto(od4, 0.0f, 0.0f, 0.0f, angTurn + 10.0f / 180.0f * M_PI, 2);                             
+                             Goto(od4, 0.0f, 0.0f, 0.0f, angTurn + 10.0f / 180.0f * M_PI, 4);                             
                          }
                          else{
                              float angTurn = - ( 90.0f / 180.0f * M_PI - angDev );
                              cur_targetCheckState.ang_toTurn = angTurn;
                              cur_targetCheckState.startAngle = cur_state_yaw;    
-                             Goto(od4, 0.0f, 0.0f, 0.0f, angTurn - 10.0f / 180.0f * M_PI, 2);          
+                             Goto(od4, 0.0f, 0.0f, 0.0f, angTurn - 10.0f / 180.0f * M_PI, 4);          
                          } 
                          on_TURNING_MODE = true;
                          cur_targetCheckState.oriAimDirection =  aimDirection_to_reach;
@@ -1381,7 +1381,7 @@
                             if ( angleDifference( cur_state_yaw, pair_cand.angle ) < 0.0f ){
                                 angTurn -= 10.0f / 180.0f * M_PI;
                             }
-                            Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 1);
+                            Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 2);
                             cur_targetCheckState.turnStarted = true;
                             break;
                          }
@@ -1432,7 +1432,7 @@
                          if ( angleDifference( yaw, cur_targetCheckState.targetAngle ) < 0.0f ){
                              angTurn -= 10.0f / 180.0f * M_PI;
                          }
-                         Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 1); 
+                         Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 2); 
                          on_TURNING_MODE = true;
                          continue;
                      }
@@ -2104,7 +2104,7 @@
                              if ( angleDifference( cur_state_yaw, pair_cand.angle ) < 0.0f ){
                                  angTurn -= 10.0f / 180.0f * M_PI;
                              }
-                             Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 3);
+                             Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 1);
                              std::cout <<" Found a path to go to and start turning to target angle with target: " << pair_cand.angle << std::endl;
                              break;
                          }
