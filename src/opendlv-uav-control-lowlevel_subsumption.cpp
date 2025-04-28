@@ -425,13 +425,22 @@ int32_t main(int32_t argc, char **argv) {
         float startAngle;
         float targetAngle;
         int nTimer;
-        float targetRangeX;
-        float targetRangeY;
+        float targetRangeXMax;
+        float targetRangeXMin;
+        float targetRangeYMax;
+        float targetRangeYMin;
         int nRangeTimer;
+    };
+    enum SortType {
+        SORT_SMALLTOBIG,
+        SORT_BIGTOSMALL,
+        SORT_XBIG,
+        SORT_YBIG
     };
     struct lookAroundStruct{
         std::vector<angleFrontState> angleFrontState_vec;
-        lookAroundState cur_lookAroundState = {false, false, false, -1.0f, -10.0f, -1.0f, 0, -1.0f, -1.0f, 0};
+        lookAroundState cur_lookAroundState = {false, false, false, -1.0f, -10.0f, -1.0f, 0, -1.0f, 10.0f, -1.0f, 10.0f, 0};
+        SortType cur_sortType = SORT_BIGTOSMALL;
         float ori_front{0.0f};        
         int nlookAroundCount = 0;
         double LookAroundElapsed = 0.0f;
@@ -3321,7 +3330,8 @@ int32_t main(int32_t argc, char **argv) {
 
             // Variables for looking around
             std::vector<angleFrontState> angleFrontState_vec;
-            lookAroundState cur_lookAroundState = {false, false, false, -1.0f, -10.0f, -1.0f, 0, -1.0f, -1.0f, 0};
+            lookAroundState cur_lookAroundState = {false, false, false, -1.0f, -10.0f, -1.0f, 0, -1.0f, 10.0f, -1.0f, 10.0f, 0};
+            SortType cur_sortType = SORT_BIGTOSMALL;
             float ori_front{0.0f};
             int nlookAroundCount = 0;
             double LookAroundElapsed = 0.0f;
@@ -3331,6 +3341,7 @@ int32_t main(int32_t argc, char **argv) {
                 std::lock_guard<std::mutex> lck(lookAroundMutex);
                 angleFrontState_vec = cur_lookAroundStruct.angleFrontState_vec;
                 cur_lookAroundState = cur_lookAroundStruct.cur_lookAroundState;
+                cur_sortType = cur_lookAroundStruct.cur_sortType;
                 ori_front = cur_lookAroundStruct.ori_front;
                 nlookAroundCount = cur_lookAroundStruct.nlookAroundCount;
                 LookAroundElapsed = cur_lookAroundStruct.LookAroundElapsed;
@@ -3567,37 +3578,52 @@ int32_t main(int32_t argc, char **argv) {
 
                     // Sort the angle array first               
                     if ( cur_lookAroundState.nRangeTimer == 3 ){
-                        if ( cur_lookAroundState.targetRangeX <= 0.5f ){
-                            std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                                if( std::abs( a.front * std::cos( a.angle ) ) != std::abs( b.front * std::cos( b.angle ) ) )
-                                    return std::abs( a.front * std::cos( a.angle ) ) > std::abs( b.front * std::cos( b.angle ) );
-                                return std::abs( a.front * std::cos( a.angle ) ) < std::abs( b.front * std::cos( b.angle ) );
-                            });
+                        if ( cur_lookAroundState.targetRangeXMax <= 1.0f && cur_lookAroundState.targetRangeYMax <= 1.0f ){
+                            cur_sortType = SORT_BIGTOSMALL;
                         }
-                        else if ( cur_lookAroundState.targetRangeY <= 0.5f ){
-                            std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                                if( std::abs( a.front * std::sin( a.angle ) ) != std::abs( b.front * std::sin( b.angle ) ) )
-                                    return std::abs( a.front * std::sin( a.angle ) ) > std::abs( b.front * std::sin( b.angle ) );
-                                return std::abs( a.front * std::sin( a.angle ) ) < std::abs( b.front * std::sin( b.angle ) );
-                            });
+                        else if ( cur_lookAroundState.targetRangeXMin >= 1.0f && cur_lookAroundState.targetRangeYMin >= 1.0f ){
+                            cur_sortType = SORT_SMALLTOBIG;
                         }
+                        else if ( cur_lookAroundState.targetRangeXMax <= 1.0f ){
+                            cur_sortType = SORT_XBIG;
+                        }
+                        else if ( cur_lookAroundState.targetRangeYMax <= 1.0f ){
+                            cur_sortType = SORT_YBIG;
+                        }
+                    }               
+                    
+                    if ( cur_sortType == SORT_XBIG ){
+                        std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                            if( std::abs( a.front * std::cos( a.angle ) ) != std::abs( b.front * std::cos( b.angle ) ) )
+                                return std::abs( a.front * std::cos( a.angle ) ) > std::abs( b.front * std::cos( b.angle ) );
+                            return std::abs( a.front * std::cos( a.angle ) ) < std::abs( b.front * std::cos( b.angle ) );
+                        });
                     }
-                    else if ( cur_lookAroundState.smallToBig == false ){
+                    else if ( cur_sortType == SORT_YBIG ){
+                        std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                            if( std::abs( a.front * std::sin( a.angle ) ) != std::abs( b.front * std::sin( b.angle ) ) )
+                                return std::abs( a.front * std::sin( a.angle ) ) > std::abs( b.front * std::sin( b.angle ) );
+                            return std::abs( a.front * std::sin( a.angle ) ) < std::abs( b.front * std::sin( b.angle ) );
+                        });
+                    }
+                    else if ( cur_sortType == SORT_BIGTOSMALL ){
                         std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
                             if( a.front != b.front )
                                 return a.front > b.front;
                             return a.angle < b.angle;
                         });
-                        cur_lookAroundState.smallToBig = true;
                     }
-                    else{
+                    else if ( cur_sortType == SORT_SMALLTOBIG ){
                         std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
                             if( a.front != b.front )
                                 return a.front < b.front;
                             return a.angle < b.angle;
                         });
-                        cur_lookAroundState.smallToBig = false;
                     }
+                    {
+                        std::lock_guard<std::mutex> lck(lookAroundMutex);
+                        cur_lookAroundStruct.cur_sortType = cur_sortType;
+                    }  
 
                     // Check for clear path
                     std::cout <<" Start path checking with angle vector size: " << angleFrontState_vec.size() << std::endl;
@@ -3774,40 +3800,51 @@ int32_t main(int32_t argc, char **argv) {
                         // Start to find another way to go to
                         // Sort the angle array first               
                         if ( cur_lookAroundState.nRangeTimer == 3 ){
-                            if ( cur_lookAroundState.targetRangeX <= 0.5f ){
-                                std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                                    if( std::abs( a.front * std::cos( a.angle ) ) != std::abs( b.front * std::cos( b.angle ) ) )
-                                        return std::abs( a.front * std::cos( a.angle ) ) > std::abs( b.front * std::cos( b.angle ) );
-                                    return std::abs( a.front * std::cos( a.angle ) ) < std::abs( b.front * std::cos( b.angle ) );
-                                });
+                            if ( cur_lookAroundState.targetRangeXMax <= 1.0f && cur_lookAroundState.targetRangeYMax <= 1.0f ){
+                                cur_sortType = SORT_BIGTOSMALL;
                             }
-                            else if ( cur_lookAroundState.targetRangeY <= 0.5f ){
-                                std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                                    if( std::abs( a.front * std::sin( a.angle ) ) != std::abs( b.front * std::sin( b.angle ) ) )
-                                        return std::abs( a.front * std::sin( a.angle ) ) > std::abs( b.front * std::sin( b.angle ) );
-                                    return std::abs( a.front * std::sin( a.angle ) ) < std::abs( b.front * std::sin( b.angle ) );
-                                });
+                            else if ( cur_lookAroundState.targetRangeXMin >= 1.0f && cur_lookAroundState.targetRangeYMin >= 1.0f ){
+                                cur_sortType = SORT_SMALLTOBIG;
                             }
+                            else if ( cur_lookAroundState.targetRangeXMax <= 1.0f ){
+                                cur_sortType = SORT_XBIG;
+                            }
+                            else if ( cur_lookAroundState.targetRangeYMax <= 1.0f ){
+                                cur_sortType = SORT_YBIG;
+                            }
+                        }               
+                        
+                        if ( cur_sortType == SORT_XBIG ){
+                            std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                                if( std::abs( a.front * std::cos( a.angle ) ) != std::abs( b.front * std::cos( b.angle ) ) )
+                                    return std::abs( a.front * std::cos( a.angle ) ) > std::abs( b.front * std::cos( b.angle ) );
+                                return std::abs( a.front * std::cos( a.angle ) ) < std::abs( b.front * std::cos( b.angle ) );
+                            });
                         }
-                        else if ( cur_lookAroundState.smallToBig == false ){
+                        else if ( cur_sortType == SORT_YBIG ){
+                            std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                                if( std::abs( a.front * std::sin( a.angle ) ) != std::abs( b.front * std::sin( b.angle ) ) )
+                                    return std::abs( a.front * std::sin( a.angle ) ) > std::abs( b.front * std::sin( b.angle ) );
+                                return std::abs( a.front * std::sin( a.angle ) ) < std::abs( b.front * std::sin( b.angle ) );
+                            });
+                        }
+                        else if ( cur_sortType == SORT_BIGTOSMALL ){
                             std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
                                 if( a.front != b.front )
                                     return a.front > b.front;
                                 return a.angle < b.angle;
                             });
-                            cur_lookAroundState.smallToBig = true;
                         }
-                        else{
+                        else if ( cur_sortType == SORT_SMALLTOBIG ){
                             std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
                                 if( a.front != b.front )
                                     return a.front < b.front;
                                 return a.angle < b.angle;
                             });
-                            cur_lookAroundState.smallToBig = false;
                         }
                         {
                             std::lock_guard<std::mutex> lck(lookAroundMutex);
-                            cur_lookAroundStruct.cur_lookAroundState.smallToBig = cur_lookAroundState.smallToBig;
+                            cur_lookAroundStruct.cur_sortType = cur_sortType;
                         }  
 
                         // Check for clear path
@@ -3909,18 +3946,26 @@ int32_t main(int32_t argc, char **argv) {
 
                     // Record ranges
                     if ( cur_lookAroundState.nRangeTimer <= 2 ){
-                       cur_lookAroundState.nRangeTimer += 1;
+                        cur_lookAroundState.nRangeTimer += 1;
                     }
                     else{
-                       cur_lookAroundState.nRangeTimer = 0;
-                       cur_lookAroundState.targetRangeX = -1.0f;
-                       cur_lookAroundState.targetRangeY = -1.0f;
+                        cur_lookAroundState.nRangeTimer = 0;
+                        cur_lookAroundState.targetRangeXMax = -1.0f;
+                        cur_lookAroundState.targetRangeYMax = -1.0f;
+                        cur_lookAroundState.targetRangeXMin = 10.0f;
+                        cur_lookAroundState.targetRangeYMin = 10.0f;
                     }
-                    if ( cur_lookAroundState.targetRangeX <= std::abs( front * std::cos( cur_state_yaw ) ) ){
-                       cur_lookAroundState.targetRangeX = std::abs( front * std::cos( cur_state_yaw ) );
+                    if ( cur_lookAroundState.targetRangeXMax <= std::abs( front * std::cos( cur_state_yaw ) ) ){
+                        cur_lookAroundState.targetRangeXMax = std::abs( front * std::cos( cur_state_yaw ) );
                     }
-                    if ( cur_lookAroundState.targetRangeY <= std::abs( front * std::cos( cur_state_yaw ) ) ){
-                       cur_lookAroundState.targetRangeY = std::abs( front * std::cos( cur_state_yaw ) );
+                    if ( cur_lookAroundState.targetRangeYMax <= std::abs( front * std::cos( cur_state_yaw ) ) ){
+                        cur_lookAroundState.targetRangeYMax = std::abs( front * std::cos( cur_state_yaw ) );
+                    }
+                    if ( cur_lookAroundState.targetRangeXMin >= std::abs( front * std::cos( cur_state_yaw ) ) ){
+                        cur_lookAroundState.targetRangeXMin = std::abs( front * std::cos( cur_state_yaw ) );
+                    }
+                    if ( cur_lookAroundState.targetRangeYMin >= std::abs( front * std::cos( cur_state_yaw ) ) ){
+                        cur_lookAroundState.targetRangeYMin = std::abs( front * std::cos( cur_state_yaw ) );
                     }
 
                     // Reset other flags
@@ -3958,8 +4003,10 @@ int32_t main(int32_t argc, char **argv) {
                         cur_lookAroundStruct.cur_lookAroundState.turnStarted = cur_lookAroundState.turnStarted;
                         cur_lookAroundStruct.cur_lookAroundState.clearPathCheckStarted = cur_lookAroundState.clearPathCheckStarted;
                         cur_lookAroundStruct.cur_lookAroundState.startAngle = cur_lookAroundState.startAngle;
-                        cur_lookAroundStruct.cur_lookAroundState.targetRangeX = cur_lookAroundState.targetRangeX;
-                        cur_lookAroundStruct.cur_lookAroundState.targetRangeY = cur_lookAroundState.targetRangeY;
+                        cur_lookAroundStruct.cur_lookAroundState.targetRangeXMax = cur_lookAroundState.targetRangeXMax;
+                        cur_lookAroundStruct.cur_lookAroundState.targetRangeYMax = cur_lookAroundState.targetRangeYMax;
+                        cur_lookAroundStruct.cur_lookAroundState.targetRangeXMin = cur_lookAroundState.targetRangeXMin;
+                        cur_lookAroundStruct.cur_lookAroundState.targetRangeYMin = cur_lookAroundState.targetRangeYMin;
                         cur_lookAroundStruct.cur_lookAroundState.nRangeTimer = cur_lookAroundState.nRangeTimer;
                         cur_lookAroundStruct.lookAroundEndTime = lookAroundEndTime;
                         cur_lookAroundStruct.LookAroundElapsed = LookAroundElapsed;
