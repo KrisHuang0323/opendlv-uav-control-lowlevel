@@ -358,7 +358,8 @@ int32_t main(int32_t argc, char **argv) {
         bool has_possibleInterrupt = false;
         bool has_possibleInterrupt_dynamic = false;
         bool has_InterruptNeedToReDo = false;
-        bool has_InterruptNeedToReDo_dynamic = false;        
+        bool has_InterruptNeedToReDo_dynamic = false; 
+        bool has_InterruptNeedToReDo_stuck = false;        
         int nObsDynamicCount = 0;
         double ObsDynamicElapsed = 0.0f;
         std::chrono::high_resolution_clock::time_point obsDynamicStartTime = std::chrono::high_resolution_clock::now();
@@ -685,6 +686,7 @@ int32_t main(int32_t argc, char **argv) {
             bool has_possibleInterrupt_dynamic = false;
             bool has_InterruptNeedToReDo = false;
             bool has_InterruptNeedToReDo_dynamic = false;
+            bool has_InterruptNeedToReDo_stuck = false;
             int nObsDynamicCount = 0;
             double ObsDynamicElapsed = 0.0f;
             auto obsDynamicStartTime = std::chrono::high_resolution_clock::now();
@@ -700,6 +702,7 @@ int32_t main(int32_t argc, char **argv) {
                 has_possibleInterrupt_dynamic = cur_dynamicObsStruct.has_possibleInterrupt_dynamic;
                 has_InterruptNeedToReDo = cur_dynamicObsStruct.has_InterruptNeedToReDo;
                 has_InterruptNeedToReDo_dynamic = cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic;
+                has_InterruptNeedToReDo_stuck = cur_dynamicObsStruct.has_InterruptNeedToReDo_stuck;
                 nObsDynamicCount = cur_dynamicObsStruct.nObsDynamicCount;
                 ObsDynamicElapsed = cur_dynamicObsStruct.ObsDynamicElapsed;
                 obsDynamicStartTime = cur_dynamicObsStruct.obsDynamicStartTime;
@@ -741,7 +744,7 @@ int32_t main(int32_t argc, char **argv) {
             }
             else{
                 if ( front_dev <= 0.1f ){
-                    has_InterruptNeedToReDo = true;
+                    has_InterruptNeedToReDo_stuck = true;
                     std::cout << "Stucks at some positions, try to escape by redo..." << std::endl;
                     nStuckEscapeCount += 1;
 
@@ -752,7 +755,7 @@ int32_t main(int32_t argc, char **argv) {
                     } 
                     {
                         std::lock_guard<std::mutex> lck(dynamicObsMutex);
-                        cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
+                        cur_dynamicObsStruct.has_InterruptNeedToReDo_stuck = has_InterruptNeedToReDo_stuck;
                     }  
                 }
                 nFrontReachingTimer = 0;
@@ -848,6 +851,7 @@ int32_t main(int32_t argc, char **argv) {
             bool has_possibleInterrupt_dynamic = false;
             bool has_InterruptNeedToReDo = false;
             bool has_InterruptNeedToReDo_dynamic = false;
+            bool has_InterruptNeedToReDo_stuck = false;
             int nObsDynamicCount = 0;
             double ObsDynamicElapsed = 0.0f;
             auto obsDynamicStartTime = std::chrono::high_resolution_clock::now();
@@ -863,6 +867,7 @@ int32_t main(int32_t argc, char **argv) {
                 has_possibleInterrupt_dynamic = cur_dynamicObsStruct.has_possibleInterrupt_dynamic;
                 has_InterruptNeedToReDo = cur_dynamicObsStruct.has_InterruptNeedToReDo;
                 has_InterruptNeedToReDo_dynamic = cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic;
+                has_InterruptNeedToReDo_stuck = cur_dynamicObsStruct.has_InterruptNeedToReDo_stuck;
                 nObsDynamicCount = cur_dynamicObsStruct.nObsDynamicCount;
                 ObsDynamicElapsed = cur_dynamicObsStruct.ObsDynamicElapsed;
                 obsDynamicStartTime = cur_dynamicObsStruct.obsDynamicStartTime;
@@ -1495,7 +1500,7 @@ int32_t main(int32_t argc, char **argv) {
             bool has_possibleInterrupt = false;
             bool has_possibleInterrupt_dynamic = false;
             bool has_InterruptNeedToReDo = false;
-            bool has_InterruptNeedToReDo_dynamic = false;
+            bool has_InterruptNeedToReDo_dynamic = false;            
             int nObsDynamicCount = 0;
             double ObsDynamicElapsed = 0.0f;
             auto obsDynamicStartTime = std::chrono::high_resolution_clock::now();
@@ -2035,6 +2040,7 @@ int32_t main(int32_t argc, char **argv) {
             bool has_possibleInterrupt_dynamic = false;
             bool has_InterruptNeedToReDo = false;
             bool has_InterruptNeedToReDo_dynamic = false;
+            bool has_InterruptNeedToReDo_stuck = false;
             int nObsDynamicCount = 0;
             double ObsDynamicElapsed = 0.0f;
             auto obsDynamicStartTime = std::chrono::high_resolution_clock::now();
@@ -2050,6 +2056,7 @@ int32_t main(int32_t argc, char **argv) {
                 has_possibleInterrupt_dynamic = cur_dynamicObsStruct.has_possibleInterrupt_dynamic;
                 has_InterruptNeedToReDo = cur_dynamicObsStruct.has_InterruptNeedToReDo;
                 has_InterruptNeedToReDo_dynamic = cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic;
+                has_InterruptNeedToReDo_stuck = cur_dynamicObsStruct.has_InterruptNeedToReDo_stuck;
                 nObsDynamicCount = cur_dynamicObsStruct.nObsDynamicCount;
                 ObsDynamicElapsed = cur_dynamicObsStruct.ObsDynamicElapsed;
                 obsDynamicStartTime = cur_dynamicObsStruct.obsDynamicStartTime;
@@ -2123,7 +2130,7 @@ int32_t main(int32_t argc, char **argv) {
                 -- move distance
             */ 
             // If Interrupted
-            if ( has_InterruptNeedToReDo || has_InterruptNeedToReDo_dynamic ){
+            if ( has_InterruptNeedToReDo || has_InterruptNeedToReDo_dynamic || has_InterruptNeedToReDo_stuck ){
                 if ( cur_targetCheckState.pointToTarget == false && ( cur_targetCheckState.turnStarted || cur_targetCheckState.aimTurnStarted ) ){
                     std::cout <<" Possible interruption needed redo without target..." << std::endl;
                     cur_targetCheckState.aimTurnStarted = false;
@@ -2148,10 +2155,14 @@ int32_t main(int32_t argc, char **argv) {
                         elapsed = obsStaticStartTime - targetFindingStartTime;
                     else if ( has_InterruptNeedToReDo_dynamic )
                         elapsed = obsDynamicStartTime - targetFindingStartTime;
+                    else if ( has_InterruptNeedToReDo_stuck )
+                        elapsed = std::chrono::high_resolution_clock::now() - targetFindingStartTime;
                     if ( has_InterruptNeedToReDo )
                         has_InterruptNeedToReDo = false;
                     if ( has_InterruptNeedToReDo_dynamic )
                         has_InterruptNeedToReDo_dynamic = false;
+                    if ( has_InterruptNeedToReDo_stuck )
+                        has_InterruptNeedToReDo_stuck = false;
 
                     std::cout <<" Original target finding start time: " << std::ctime(&start_time_t) << std::endl;
                     std::cout <<" Interrupted after: " << elapsed.count() << "seconds(s)" << std::endl;
@@ -2171,6 +2182,7 @@ int32_t main(int32_t argc, char **argv) {
                         std::lock_guard<std::mutex> lck(dynamicObsMutex);
                         cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
                         cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
+                        cur_dynamicObsStruct.has_InterruptNeedToReDo_stuck = has_InterruptNeedToReDo_stuck;
                     }
                 }
             }
@@ -2768,6 +2780,7 @@ int32_t main(int32_t argc, char **argv) {
             bool has_possibleInterrupt_dynamic = false;
             bool has_InterruptNeedToReDo = false;
             bool has_InterruptNeedToReDo_dynamic = false;
+            bool has_InterruptNeedToReDo_stuck = false;
             int nObsDynamicCount = 0;
             double ObsDynamicElapsed = 0.0f;
             auto obsDynamicStartTime = std::chrono::high_resolution_clock::now();
@@ -2783,6 +2796,7 @@ int32_t main(int32_t argc, char **argv) {
                 has_possibleInterrupt_dynamic = cur_dynamicObsStruct.has_possibleInterrupt_dynamic;
                 has_InterruptNeedToReDo = cur_dynamicObsStruct.has_InterruptNeedToReDo;
                 has_InterruptNeedToReDo_dynamic = cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic;
+                has_InterruptNeedToReDo_stuck = cur_dynamicObsStruct.has_InterruptNeedToReDo_stuck;
                 nObsDynamicCount = cur_dynamicObsStruct.nObsDynamicCount;
                 ObsDynamicElapsed = cur_dynamicObsStruct.ObsDynamicElapsed;
                 obsDynamicStartTime = cur_dynamicObsStruct.obsDynamicStartTime;
@@ -2864,6 +2878,11 @@ int32_t main(int32_t argc, char **argv) {
                         angleFrontState_vec.clear();
                     }
 
+                    {
+                        std::lock_guard<std::mutex> lck(suppressMutex);
+                        cur_suppressStruct.isFrontReachingDominating = false;
+                    }
+
                     on_GoTO_MODE = false;
 
                     auto start_time_t = std::chrono::system_clock::to_time_t(
@@ -2898,7 +2917,7 @@ int32_t main(int32_t argc, char **argv) {
             }
 
             // If being interrupted, try to go to the original path again
-            if ( has_possibleInterrupt || has_possibleInterrupt_dynamic || has_InterruptNeedToReDo || has_InterruptNeedToReDo_dynamic ){
+            if ( has_possibleInterrupt || has_possibleInterrupt_dynamic || has_InterruptNeedToReDo || has_InterruptNeedToReDo_dynamic || has_InterruptNeedToReDo_stuck ){
                 if ( cur_pathReachingState.pathReadyToGo && cur_pathReachingState.pathOnGoing ){
                     std::cout <<" Being interrupted and try to go again..." << std::endl;
                     cur_pathReachingState.pathOnGoing = false;
@@ -2917,6 +2936,8 @@ int32_t main(int32_t argc, char **argv) {
                         elapsed = obsStaticStartTime - frontReachingStartTime;
                     else if ( has_possibleInterrupt_dynamic || has_InterruptNeedToReDo_dynamic )
                         elapsed = obsDynamicStartTime - frontReachingStartTime;
+                    else if ( has_InterruptNeedToReDo_stuck )
+                        elapsed = std::chrono::high_resolution_clock::now() - frontReachingStartTime;
 
                     auto start_time_t = std::chrono::system_clock::to_time_t(
                         std::chrono::time_point_cast<std::chrono::system_clock::duration>(frontReachingStartTime)
@@ -2934,6 +2955,8 @@ int32_t main(int32_t argc, char **argv) {
                         has_InterruptNeedToReDo = false;
                     if ( has_InterruptNeedToReDo_dynamic )
                         has_InterruptNeedToReDo_dynamic = false;
+                    if ( has_InterruptNeedToReDo_stuck )
+                        has_InterruptNeedToReDo_stuck = false;
 
                     // Restart the timer again             
                     frontReachingStartTime = std::chrono::high_resolution_clock::now(); 
@@ -2951,6 +2974,7 @@ int32_t main(int32_t argc, char **argv) {
                         cur_dynamicObsStruct.has_possibleInterrupt_dynamic = has_possibleInterrupt_dynamic;
                         cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
                         cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
+                        cur_dynamicObsStruct.has_InterruptNeedToReDo_stuck = has_InterruptNeedToReDo_stuck;
                     }
                 }
             }
@@ -3184,6 +3208,7 @@ int32_t main(int32_t argc, char **argv) {
             bool has_possibleInterrupt_dynamic = false;
             bool has_InterruptNeedToReDo = false;
             bool has_InterruptNeedToReDo_dynamic = false;
+            bool has_InterruptNeedToReDo_stuck = false;
             int nObsDynamicCount = 0;
             double ObsDynamicElapsed = 0.0f;
             auto obsDynamicStartTime = std::chrono::high_resolution_clock::now();
@@ -3199,6 +3224,7 @@ int32_t main(int32_t argc, char **argv) {
                 has_possibleInterrupt_dynamic = cur_dynamicObsStruct.has_possibleInterrupt_dynamic;
                 has_InterruptNeedToReDo = cur_dynamicObsStruct.has_InterruptNeedToReDo;
                 has_InterruptNeedToReDo_dynamic = cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic;
+                has_InterruptNeedToReDo_stuck = cur_dynamicObsStruct.has_InterruptNeedToReDo_stuck;
                 nObsDynamicCount = cur_dynamicObsStruct.nObsDynamicCount;
                 ObsDynamicElapsed = cur_dynamicObsStruct.ObsDynamicElapsed;
                 obsDynamicStartTime = cur_dynamicObsStruct.obsDynamicStartTime;
@@ -3266,7 +3292,7 @@ int32_t main(int32_t argc, char **argv) {
                 - In the mean time, record some possible front path to go to
             */
             // If Interrupted
-            if ( has_InterruptNeedToReDo || has_InterruptNeedToReDo_dynamic ){
+            if ( has_InterruptNeedToReDo || has_InterruptNeedToReDo_dynamic || has_InterruptNeedToReDo_stuck ){
                 if ( cur_lookAroundState.turnStarted || cur_lookAroundState.clearPathCheckStarted ){
                     std::cout <<" Possible interruption to reset look around..." << std::endl;
                     cur_lookAroundState.turnStarted = false;
@@ -3302,6 +3328,8 @@ int32_t main(int32_t argc, char **argv) {
                     elapsed = obsStaticStartTime - lookAroundStartTime;
                 else if ( has_InterruptNeedToReDo_dynamic )
                     elapsed = obsDynamicStartTime - lookAroundStartTime;
+                else if ( has_InterruptNeedToReDo_stuck )
+                    elapsed = std::chrono::high_resolution_clock::now() - lookAroundStartTime;
 
                 auto start_time_t = std::chrono::system_clock::to_time_t(
                     std::chrono::time_point_cast<std::chrono::system_clock::duration>(lookAroundStartTime)
@@ -3313,8 +3341,10 @@ int32_t main(int32_t argc, char **argv) {
                 //  lookAroundStartTime = std::chrono::high_resolution_clock::now();
                 if ( has_InterruptNeedToReDo )
                     has_InterruptNeedToReDo = false;
-                else if ( has_InterruptNeedToReDo_dynamic )
-                    has_InterruptNeedToReDo_dynamic = false;             
+                if ( has_InterruptNeedToReDo_dynamic )
+                    has_InterruptNeedToReDo_dynamic = false;   
+                if ( has_InterruptNeedToReDo_stuck )
+                    has_InterruptNeedToReDo_stuck = false;               
 
                 // Set variables back
                 {
@@ -3325,12 +3355,18 @@ int32_t main(int32_t argc, char **argv) {
                     std::lock_guard<std::mutex> lck(dynamicObsMutex);
                     cur_dynamicObsStruct.has_InterruptNeedToReDo = has_InterruptNeedToReDo;
                     cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
+                    cur_dynamicObsStruct.has_InterruptNeedToReDo_stuck = has_InterruptNeedToReDo_stuck;
                 }
             }
 
             // Try to find a clear path close to the target
             // std::cout <<" Run to here with clearPathCheckStarted: " << cur_lookAroundState.clearPathCheckStarted << std::endl;
             if ( cur_lookAroundState.clearPathCheckStarted == false ){
+                if ( cur_suppressStruct.isObsStaticDominating || cur_suppressStruct.isObsDynamicDominating
+                    || cur_suppressStruct.isTargetFindingDominating || cur_suppressStruct.isFrontReachingDominating ){
+                    // std::cout << "look around task being suppressed!" << std::endl;
+                    continue;
+                }   // Wait until the domination change to target finding
                 std::cout <<" No target exist, ready to turn around to find" << std::endl;
                 if ( cur_lookAroundState.nTimer == 0 ){
                     nlookAroundCount += 1;
@@ -3362,6 +3398,11 @@ int32_t main(int32_t argc, char **argv) {
                 }
             }
             else if ( cur_lookAroundState.turnStarted == false ){
+                if ( cur_suppressStruct.isObsStaticDominating || cur_suppressStruct.isObsDynamicDominating
+                    || cur_suppressStruct.isTargetFindingDominating || cur_suppressStruct.isFrontReachingDominating ){
+                    // std::cout << "look around task being suppressed!" << std::endl;
+                    continue;
+                }   // Wait until the domination change to target finding
                 if ( std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state_yaw ) ) < 110.0f / 180.0f * M_PI ){
                     if ( has_possibleInterrupt || has_possibleInterrupt_dynamic ){
                         std::cout <<" Some targets occur, so try to look up again..." << std::endl;
@@ -3440,6 +3481,12 @@ int32_t main(int32_t argc, char **argv) {
                     }  
                 }
                 else{
+                    if ( cur_suppressStruct.isObsStaticDominating || cur_suppressStruct.isObsDynamicDominating
+                        || cur_suppressStruct.isTargetFindingDominating || cur_suppressStruct.isFrontReachingDominating ){
+                        // std::cout << "look around task being suppressed!" << std::endl;
+                        continue;
+                    }   // Wait until the domination change to target finding
+
                     // Stop the turning action
                     Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false);
 
@@ -3585,6 +3632,11 @@ int32_t main(int32_t argc, char **argv) {
                 }
             }
             else{
+                if ( cur_suppressStruct.isObsStaticDominating || cur_suppressStruct.isObsDynamicDominating
+                    || cur_suppressStruct.isTargetFindingDominating || cur_suppressStruct.isFrontReachingDominating ){
+                    // std::cout << "look around task being suppressed!" << std::endl;
+                    continue;
+                }   // Wait until the domination change to target finding
                 if ( std::abs( angleDifference( cur_lookAroundState.targetAngle, cur_state_yaw ) ) >= 5.0f / 180.0f * M_PI ){
                     if ( has_possibleInterrupt || has_possibleInterrupt_dynamic ){
                         std::cout <<" Some targets occur, so try to turn to the target look up angle again..." << std::endl;
@@ -4046,7 +4098,6 @@ int32_t main(int32_t argc, char **argv) {
                         std::cout <<" Do landing and stopping with low battery..." << std::endl;
 
                     // Record the end time
-                    isTerminateThread = true;
                     taskEndTime = std::chrono::high_resolution_clock::now();
                     const std::chrono::duration<double> elapsed = taskEndTime - taskStartTime;
 
@@ -4056,6 +4107,12 @@ int32_t main(int32_t argc, char **argv) {
                     auto end_time_t = std::chrono::system_clock::to_time_t(
                         std::chrono::time_point_cast<std::chrono::system_clock::duration>(taskEndTime)
                     );
+                    isTerminateThread = true;
+                    Stopping(od4);
+                    Stopping(od4);
+                    Stopping(od4);
+                    Stopping(od4);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(3000));
 
                     std::cout <<" Task(subsumption ver.) complete with start time: " << std::ctime(&start_time_t) << std::endl;
                     std::cout <<" , end time: " << std::ctime(&end_time_t) << std::endl;
@@ -4070,6 +4127,7 @@ int32_t main(int32_t argc, char **argv) {
                     std::cout <<" , so far has done front reaching for " << nfrontReachingCount << " times" << std::endl;
                     std::cout <<" , average look around elapsed: " << LookAroundElapsed / nlookAroundCount << " seconds(s)" << std::endl;
                     std::cout <<" , so far has done look around for " << nlookAroundCount << " times" << std::endl;
+                    std::cout <<" , we found target for " << nTargetTimer << " times" << std::endl;
                     std::cout <<" , average close to ball elapsed: " << closeBallTimer / closeBallCount << " seconds(s)" << std::endl;
                     std::cout <<" , so far has closed to ball for " << closeBallCount << " times" << std::endl;
                     std::cout <<" , average close to static obs elapsed: " << closeStaticObsTimer / closeStaticObsCount << " seconds(s)" << std::endl;
@@ -4087,14 +4145,13 @@ int32_t main(int32_t argc, char **argv) {
     }    
 
     // Detach every thread
+    ValidRangeCheckTask.join();
+    StuckEscapeTask.join();
+    StaticObsDodgeTask.join();
+    DynamicObsDodgeTask.join();
+    TargetFindingTask.join();
+    FrontReachingTask.join();
+    LookAroundTask.join();
     std::this_thread::sleep_for(std::chrono::milliseconds(3000));
-    ValidRangeCheckTask.detach();
-    StuckEscapeTask.detach();
-    StaticObsDodgeTask.detach();
-    DynamicObsDodgeTask.detach();
-    TargetFindingTask.detach();
-    FrontReachingTask.detach();
-    LookAroundTask.detach();
-
     return 0;
 }
