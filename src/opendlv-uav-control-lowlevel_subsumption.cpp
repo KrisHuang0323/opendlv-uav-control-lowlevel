@@ -4090,7 +4090,13 @@ int32_t main(int32_t argc, char **argv) {
             // Find the charging pad, stop and do landing
             if ( (is_chpad_found == 1||(dist_to_reach * std::cos( aimDirection_to_reach ) <= 30.0f && dist_to_reach <= 150.0f && dist_to_reach != -1.0f)) ){
                 if ( cur_state_battery_state <= homing_batterythreshold || nTargetTimer >= nTargetCount ) {
+                    isTerminateThread = true;
+                    taskEndTime = std::chrono::high_resolution_clock::now();
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5000));
                     Landing(od4, 0.0f, 3);
+                    Goto(od4, 0.0f, 0.0f, 0.0f, 0, 1, true);
+                    Goto(od4, 0.0f, 0.0f, 0.0f, 0, 1, true);
+                    Goto(od4, 0.0f, 0.0f, 0.0f, 0, 1, true);
                     Stopping(od4);
                     if ( nTargetTimer >= nTargetCount && is_chpad_found == 1 )
                         std::cout <<" Successfully do landing and stopping with all targets found..." << std::endl;
@@ -4107,12 +4113,6 @@ int32_t main(int32_t argc, char **argv) {
                     auto end_time_t = std::chrono::system_clock::to_time_t(
                         std::chrono::time_point_cast<std::chrono::system_clock::duration>(taskEndTime)
                     );
-                    isTerminateThread = true;
-                    Stopping(od4);
-                    Stopping(od4);
-                    Stopping(od4);
-                    Stopping(od4);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(3000));
 
                     std::cout <<" Task(subsumption ver.) complete with start time: " << std::ctime(&start_time_t) << std::endl;
                     std::cout <<" , end time: " << std::ctime(&end_time_t) << std::endl;
