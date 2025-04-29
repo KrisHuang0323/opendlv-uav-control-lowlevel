@@ -253,6 +253,33 @@
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
      od4->dataTrigger(opendlv::logic::sensation::RewardRecord::ID(), onRewardRecordRead);
+
+     float safeDist_ratio = 0.0f;
+     float dodge_dist_totune = 0.2f;  
+     float cur_distToMove_ratio = 1.0f;
+     float time_ToMove_ratio = 1.0f;
+     float angTurn_targetFinding = 90.0f;
+     float time_ToTurn_ratio = 0.0f;
+     float angTurn_lookAround = 90.0f;
+     bool ReadyToStart = false;
+     auto onRewardRecordRead = [&nTargetTimer, &is_chpad_found, &closeBallTimer, &closeBallCount, &closeStaticObsTimer, &closeStaticObsCount](cluon::data::Envelope &&env){
+         auto senderStamp = env.senderStamp();
+         // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
+         opendlv::logic::sensation::RewardRecord rRecordmessage = cluon::extractMessage<opendlv::logic::sensation::RewardRecord>(std::move(env));
+         
+         // Store aim direction readings.
+        //  std::lock_guard<std::mutex> lck(aimDirectionMutex);
+         if ( senderStamp == 0 ){
+            closeBallTimer = rRecordmessage.too_close_ball_timer();
+            closeBallCount = rRecordmessage.too_close_ball_count();
+            closeStaticObsTimer = rRecordmessage.too_close_staticobs_timer();
+            closeStaticObsCount = rRecordmessage.too_close_staticobs_count();
+            nTargetTimer = rRecordmessage.target_found_count();
+            is_chpad_found = rRecordmessage.is_chpad_found();
+         }
+     };
+     // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
+     od4->dataTrigger(opendlv::logic::sensation::RewardRecord::ID(), onRewardRecordRead);
  
      // Takeoff flags
      bool hasTakeoff = false;
@@ -415,6 +442,16 @@
      while (od4->isRunning()) {
          // Sleep for 10 ms to not let the loop run to fast
          std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+         if ( ReadyToStart == false ){
+            // Terminate the loop
+            if ( hasTakeoff ){
+                Landing(od4, 0.0f, 3);
+                Stopping(od4);
+                hasTakeoff = false;
+            }
+            continue;
+         }
  
          /*
              Takeoff
@@ -647,10 +684,7 @@
          */
          // Check if the crazyflie stucks at some points
          float safe_dist{0.0f};
-         if ( front >= 1.0f )
-             safe_dist = safe_endreach_dist + front / 4 + 0.35f;
-         else
-             safe_dist = safe_endreach_dist;
+         safe_dist = safe_endreach_dist + safeDist_ratio * front;
          if ( front <= safe_endreach_ultimate_dist ){
             std::cout <<" Front is super close to something..." << std::endl;
             if ( cur_reachEndState.reachFront == false ){
@@ -660,8 +694,8 @@
                 on_GoTO_MODE = false;
                 has_InterruptNeedToReDo = true;
             }
-            if ( rear >= 0.2f + safe_endreach_ultimate_dist ){
-                Goto(od4, - 0.2f * std::cos( cur_state_yaw ), - 0.2f * std::sin( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying rear to dodge
+            if ( rear >= dodge_dist_totune + safe_endreach_ultimate_dist ){
+                Goto(od4, - dodge_dist_totune * std::cos( cur_state_yaw ), - dodge_dist_totune * std::sin( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying rear to dodge
             }
             else{
                 Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction                
@@ -704,8 +738,8 @@
  
          if ( left <= safe_endreach_ultimate_dist ){
             std::cout <<" Left is super close to something..." << std::endl;
-            if ( right >= 0.2f + safe_endreach_ultimate_dist ){
-                Goto(od4, 0.2f * std::sin( cur_state_yaw ), - 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying rear to dodge
+            if ( right >= dodge_dist_totune + safe_endreach_ultimate_dist ){
+                Goto(od4, dodge_dist_totune * std::sin( cur_state_yaw ), - dodge_dist_totune * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying rear to dodge
             }
             else{
                 Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction                
