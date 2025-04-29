@@ -614,27 +614,27 @@
          /*
              Stucks Escape for 10 secs
          */
-         if ( pre_front == -1.0f ){
-            pre_front = front;
-            nFrontReachingTimer += 1;
-         }
-         else if ( nFrontReachingTimer <= 1000){
-            float dev = std::abs( pre_front - front );
-            if ( dev > front_dev ){
-                front_dev = dev;
-            }
-            nFrontReachingTimer += 1;
-         }
-         else{
-            if ( front_dev <= 0.1f ){
-                has_InterruptNeedToReDo_stuck = true;
-                std::cout << "Stucks at some positions, try to escape by redo..." << std::endl;
-                nStuckEscapeCount += 1;
-            }
-            nFrontReachingTimer = 0;
-            pre_front = -1.0f;
-            front_dev = -1.0f;
-         }
+        //  if ( pre_front == -1.0f ){
+        //     pre_front = front;
+        //     nFrontReachingTimer += 1;
+        //  }
+        //  else if ( nFrontReachingTimer <= 1000){
+        //     float dev = std::abs( pre_front - front );
+        //     if ( dev > front_dev ){
+        //         front_dev = dev;
+        //     }
+        //     nFrontReachingTimer += 1;
+        //  }
+        //  else{
+        //     if ( front_dev <= 0.1f ){
+        //         has_InterruptNeedToReDo_stuck = true;
+        //         std::cout << "Stucks at some positions, try to escape by redo..." << std::endl;
+        //         nStuckEscapeCount += 1;
+        //     }
+        //     nFrontReachingTimer = 0;
+        //     pre_front = -1.0f;
+        //     front_dev = -1.0f;
+        //  }
 
  
          /*

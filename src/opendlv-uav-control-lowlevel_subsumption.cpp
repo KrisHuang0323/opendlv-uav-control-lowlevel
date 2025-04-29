@@ -1347,7 +1347,7 @@ int32_t main(int32_t argc, char **argv) {
                     std::lock_guard<std::mutex> lck(suppressMutex);
                     cur_suppressStruct.isObsStaticDominating = true;
                 }
-                if ( rear >= 0.2f + safe_endreach_ultimate_dist ){
+                if ( front >= 0.2f + safe_endreach_ultimate_dist ){
                     Goto(od4, 0.2f * std::cos( cur_state_yaw ), 0.2f * std::sin( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying rear to dodge
                 }
                 else{
