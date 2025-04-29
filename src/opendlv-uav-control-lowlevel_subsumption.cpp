@@ -2208,6 +2208,10 @@ int32_t main(int32_t argc, char **argv) {
                         cur_dynamicObsStruct.has_InterruptNeedToReDo_dynamic = has_InterruptNeedToReDo_dynamic;
                         cur_dynamicObsStruct.has_InterruptNeedToReDo_stuck = has_InterruptNeedToReDo_stuck;
                     }
+                    {
+                        std::lock_guard<std::mutex> lck(suppressMutex);
+                        cur_suppressStruct.isTargetFindingDominating = false;
+                    }
                 }
             }
 
@@ -2265,6 +2269,10 @@ int32_t main(int32_t argc, char **argv) {
                     {
                         std::lock_guard<std::mutex> lck(validRangeMutex);
                         cur_validRangeStruct.on_GoTO_MODE = on_GoTO_MODE;
+                    }
+                    {
+                        std::lock_guard<std::mutex> lck(suppressMutex);
+                        cur_suppressStruct.isFrontReachingDominating = false;
                     }
                 }
             }

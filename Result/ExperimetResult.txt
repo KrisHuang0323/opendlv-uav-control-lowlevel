@@ -1,28 +1,80 @@
-Maze experiment: 
-1.(100)-FSM
-Task complete with start time: Mon Apr 28 14:07:40 2025
+===Maze experiment===
+FSM:
+Subsumption:
+(90)
+Task(subsumption ver.) complete with start time: Tue Apr 29 09:05:21 2025
 crazyflie-control-1         | 
-crazyflie-control-1         |  , end time: Mon Apr 28 14:12:42 2025
+crazyflie-control-1         |  , end time: Tue Apr 29 09:08:33 2025
 crazyflie-control-1         | 
-crazyflie-control-1         |  , task elapsed: 301.872 seconds(s)
-crazyflie-control-1         |  , average obs static dodging elapsed: 0.814173 seconds(s)
+crazyflie-control-1         |  , task elapsed: 191.99 seconds(s)
+crazyflie-control-1         |  , average obs static dodging elapsed: 0.706887 seconds(s)
 crazyflie-control-1         |  , so far has dodged obs static for 11 times
-crazyflie-control-1         |  , average obs dynamic dodging elapsed: 1.71155 seconds(s)
-crazyflie-control-1         |  , so far has dodged obs dynamic for 11 times
-crazyflie-control-1         |  , average target finding elapsed: 2.5646 seconds(s)
-crazyflie-control-1         |  , so far has done target finding for 9 times
-crazyflie-control-1         |  , average front reaching elapsed: 2.21669 seconds(s)
-crazyflie-control-1         |  , so far has done front reaching for 31 times
-crazyflie-control-1         |  , average look around elapsed: 4.55055 seconds(s)
-crazyflie-control-1         |  , so far has done look around for 36 times
+crazyflie-control-1         |  , average obs dynamic dodging elapsed: 1.04672 seconds(s)
+crazyflie-control-1         |  , so far has dodged obs dynamic for 10 times
+crazyflie-control-1         |  , average target finding elapsed: 2.53243 seconds(s)
+crazyflie-control-1         |  , so far has done target finding for 5 times
+crazyflie-control-1         |  , average front reaching elapsed: 2.32021 seconds(s)
+crazyflie-control-1         |  , so far has done front reaching for 21 times
+crazyflie-control-1         |  , average look around elapsed: 4.01172 seconds(s)
+crazyflie-control-1         |  , so far has done look around for 25 times
+crazyflie-control-1         |  , we found target for 2 times
 crazyflie-control-1         |  , average close to ball elapsed: -nan seconds(s)
 crazyflie-control-1         |  , so far has closed to ball for 0 times
 crazyflie-control-1         |  , average close to static obs elapsed: -nan seconds(s)
 crazyflie-control-1         |  , so far has closed to static obs for 0 times
-crazyflie-control-1         |  , so far has escaped from stucks for 1 times
+crazyflie-control-1         |  , so far has escaped from stucks for 0 times
 
-Rooms experiment: 
-1.(100)-FSM
+(90)
+Task(subsumption ver.) complete with start time: Tue Apr 29 09:38:55 2025
+crazyflie-control-1         | 
+crazyflie-control-1         |  , end time: Tue Apr 29 09:41:05 2025
+crazyflie-control-1         | 
+crazyflie-control-1         |  , task elapsed: 130.581 seconds(s)
+crazyflie-control-1         |  , average obs static dodging elapsed: 0.861835 seconds(s)
+crazyflie-control-1         |  , so far has dodged obs static for 11 times
+crazyflie-control-1         |  , average obs dynamic dodging elapsed: 1.47801 seconds(s)
+crazyflie-control-1         |  , so far has dodged obs dynamic for 6 times
+crazyflie-control-1         |  , average target finding elapsed: 2.84646 seconds(s)
+crazyflie-control-1         |  , so far has done target finding for 4 times
+crazyflie-control-1         |  , average front reaching elapsed: 2.26493 seconds(s)
+crazyflie-control-1         |  , so far has done front reaching for 16 times
+crazyflie-control-1         |  , average look around elapsed: 4.31862 seconds(s)
+crazyflie-control-1         |  , so far has done look around for 14 times
+crazyflie-control-1         |  , we found target for 2 times
+crazyflie-control-1         |  , average close to ball elapsed: -nan seconds(s)
+crazyflie-control-1         |  , so far has closed to ball for 0 times
+crazyflie-control-1         |  , average close to static obs elapsed: -nan seconds(s)
+crazyflie-control-1         |  , so far has closed to static obs for 0 times
+crazyflie-control-1         |  , so far has escaped from stucks for 0 times
+
+(90)
+Task(subsumption ver.) complete with start time: Tue Apr 29 11:45:41 2025
+crazyflie-control-1         | 
+crazyflie-control-1         |  , end time: Tue Apr 29 11:48:07 2025
+crazyflie-control-1         | 
+crazyflie-control-1         |  , task elapsed: 146.562 seconds(s)
+crazyflie-control-1         |  , average obs static dodging elapsed: 1.71157 seconds(s)
+crazyflie-control-1         |  , so far has dodged obs static for 11 times
+crazyflie-control-1         |  , average obs dynamic dodging elapsed: 1.262 seconds(s)
+crazyflie-control-1         |  , so far has dodged obs dynamic for 6 times
+crazyflie-control-1         |  , average target finding elapsed: 2.45342 seconds(s)
+crazyflie-control-1         |  , so far has done target finding for 6 times
+crazyflie-control-1         |  , average front reaching elapsed: 2.6708 seconds(s)
+crazyflie-control-1         |  , so far has done front reaching for 15 times
+crazyflie-control-1         |  , average look around elapsed: 4.10348 seconds(s)
+crazyflie-control-1         |  , so far has done look around for 17 times
+crazyflie-control-1         |  , we found target for 2 times
+crazyflie-control-1         |  , average close to ball elapsed: -nan seconds(s)
+crazyflie-control-1         |  , so far has closed to ball for 0 times
+crazyflie-control-1         |  , average close to static obs elapsed: -nan seconds(s)
+crazyflie-control-1         |  , so far has closed to static obs for 0 times
+crazyflie-control-1         |  , so far has escaped from stucks for 0 times
+
+
+
+===Rooms experiment===
+FSM:
+(100)
 Task complete with start time: Mon Apr 28 15:49:53 2025
 crazyflie-control-1         | 
 crazyflie-control-1         |  , end time: Mon Apr 28 15:51:44 2025
@@ -43,7 +95,9 @@ crazyflie-control-1         |  , so far has closed to ball for 0 times
 crazyflie-control-1         |  , average close to static obs elapsed: -nan seconds(s)
 crazyflie-control-1         |  , so far has closed to static obs for 0 times
 crazyflie-control-1         |  , so far has escaped from stucks for 0 times
-2.(100)-Subsumption
+
+Subsumption:
+(100)
 Task(subsumption ver.) complete with start time: Mon Apr 28 15:54:55 2025
 crazyflie-control-1         | 
 crazyflie-control-1         |  , end time: Mon Apr 28 15:56:28 2025
@@ -64,7 +118,8 @@ crazyflie-control-1         |  , so far has closed to ball for 0 times
 crazyflie-control-1         |  , average close to static obs elapsed: -nan seconds(s)
 crazyflie-control-1         |  , so far has closed to static obs for 0 times
 crazyflie-control-1         |  , so far has escaped from stucks for 1 times
-3. (90)-Subsumption
+
+(90)
 Task(subsumption ver.) complete with start time: Mon Apr 28 17:01:36 2025
 crazyflie-control-1         |  , end time: Mon Apr 28 17:03:40 2025
 crazyflie-control-1         |  , task elapsed: 123.869 seconds(s)
@@ -83,7 +138,8 @@ crazyflie-control-1         |  , so far has closed to ball for 0 times
 crazyflie-control-1         |  , average close to static obs elapsed: -nan seconds(s)
 crazyflie-control-1         |  , so far has closed to static obs for 0 times
 crazyflie-control-1         |  , so far has escaped from stucks for 0 times
-4.(90)-Subsumption
+
+(90)
 Task(subsumption ver.) complete with start time: Mon Apr 28 17:06:55 2025
 crazyflie-control-1         | 
 crazyflie-control-1         |  , end time: Mon Apr 28 17:08:59 2025
@@ -105,7 +161,7 @@ crazyflie-control-1         |  , average close to static obs elapsed: -nan secon
 crazyflie-control-1         |  , so far has closed to static obs for 0 times
 crazyflie-control-1         |  , so far has escaped from stucks for 0 times
 
-5.(100)-Subsumption
+(100)
 Task(subsumption ver.) complete with start time: Mon Apr 28 17:15:41 2025
 crazyflie-control-1         | 
 crazyflie-control-1         |  , end time: Mon Apr 28 17:17:35 2025
@@ -128,6 +184,74 @@ crazyflie-control-1         |  , average close to static obs elapsed: -nan secon
 crazyflie-control-1         |  , so far has closed to static obs for 0 times
 crazyflie-control-1         |  , so far has escaped from stucks for 0 times
 
+(90)
+Task(subsumption ver.) complete with start time: Tue Apr 29 10:06:27 2025
+crazyflie-control-1         | 
+crazyflie-control-1         |  , end time: Tue Apr 29 10:08:20 2025
+crazyflie-control-1         | 
+crazyflie-control-1         |  , task elapsed: 112.729 seconds(s)
+crazyflie-control-1         |  , average obs static dodging elapsed: 1.08271 seconds(s)
+crazyflie-control-1         |  , so far has dodged obs static for 4 times
+crazyflie-control-1         |  , average obs dynamic dodging elapsed: 1.62144 seconds(s)
+crazyflie-control-1         |  , so far has dodged obs dynamic for 8 times
+crazyflie-control-1         |  , average target finding elapsed: 3.54825 seconds(s)
+crazyflie-control-1         |  , so far has done target finding for 12 times
+crazyflie-control-1         |  , average front reaching elapsed: 1.82942 seconds(s)
+crazyflie-control-1         |  , so far has done front reaching for 13 times
+crazyflie-control-1         |  , average look around elapsed: 1.52877 seconds(s)
+crazyflie-control-1         |  , so far has done look around for 11 times
+crazyflie-control-1         |  , we found target for 3 times
+crazyflie-control-1         |  , average close to ball elapsed: -nan seconds(s)
+crazyflie-control-1         |  , so far has closed to ball for 0 times
+crazyflie-control-1         |  , average close to static obs elapsed: -nan seconds(s)
+crazyflie-control-1         |  , so far has closed to static obs for 0 times
+crazyflie-control-1         |  , so far has escaped from stucks for 0 times
+
+(90)
+ Task(subsumption ver.) complete with start time: Tue Apr 29 11:51:01 2025
+crazyflie-control-1         | 
+crazyflie-control-1         |  , end time: Tue Apr 29 11:53:14 2025
+crazyflie-control-1         | 
+crazyflie-control-1         |  , task elapsed: 133.1 seconds(s)
+crazyflie-control-1         |  , average obs static dodging elapsed: 2.63654 seconds(s)
+crazyflie-control-1         |  , so far has dodged obs static for 5 times
+crazyflie-control-1         |  , average obs dynamic dodging elapsed: 1.5452 seconds(s)
+crazyflie-control-1         |  , so far has dodged obs dynamic for 5 times
+crazyflie-control-1         |  , average target finding elapsed: 2.85484 seconds(s)
+crazyflie-control-1         |  , so far has done target finding for 15 times
+crazyflie-control-1         |  , average front reaching elapsed: 1.78513 seconds(s)
+crazyflie-control-1         |  , so far has done front reaching for 18 times
+crazyflie-control-1         |  , average look around elapsed: 2.33746 seconds(s)
+crazyflie-control-1         |  , so far has done look around for 16 times
+crazyflie-control-1         |  , we found target for 3 times
+crazyflie-control-1         |  , average close to ball elapsed: -nan seconds(s)
+crazyflie-control-1         |  , so far has closed to ball for 0 times
+crazyflie-control-1         |  , average close to static obs elapsed: -nan seconds(s)
+crazyflie-control-1         |  , so far has closed to static obs for 0 times
+crazyflie-control-1         |  , so far has escaped from stucks for 0 times
+
+(100)
+Task(subsumption ver.) complete with start time: Tue Apr 29 11:57:05 2025
+crazyflie-control-1         | 
+crazyflie-control-1         |  , end time: Tue Apr 29 11:58:49 2025
+crazyflie-control-1         | 
+crazyflie-control-1         |  , task elapsed: 103.734 seconds(s)
+crazyflie-control-1         |  , average obs static dodging elapsed: 2.07805 seconds(s)
+crazyflie-control-1         |  , so far has dodged obs static for 5 times
+crazyflie-control-1         |  , average obs dynamic dodging elapsed: 1.10493 seconds(s)
+crazyflie-control-1         |  , so far has dodged obs dynamic for 8 times
+crazyflie-control-1         |  , average target finding elapsed: 3.06923 seconds(s)
+crazyflie-control-1         |  , so far has done target finding for 10 times
+crazyflie-control-1         |  , average front reaching elapsed: 2.0278 seconds(s)
+crazyflie-control-1         |  , so far has done front reaching for 11 times
+crazyflie-control-1         |  , average look around elapsed: 3.35915 seconds(s)
+crazyflie-control-1         |  , so far has done look around for 8 times
+crazyflie-control-1         |  , we found target for 3 times
+crazyflie-control-1         |  , average close to ball elapsed: -nan seconds(s)
+crazyflie-control-1         |  , so far has closed to ball for 0 times
+crazyflie-control-1         |  , average close to static obs elapsed: -nan seconds(s)
+crazyflie-control-1         |  , so far has closed to static obs for 0 times
+crazyflie-control-1         |  , so far has escaped from stucks for 0 times
 
 
 
