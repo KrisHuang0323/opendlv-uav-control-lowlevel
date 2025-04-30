@@ -388,3 +388,38 @@ message opendlv.logic.sensation.RewardRecord [id = 1194] {
   uint16 target_found_count [id = 5];
   uint16 is_chpad_found [id = 6];
 }
+
+message opendlv.logic.sensation.GAParam [id = 1196] {
+  float safeDist_ratio [id = 1];
+  float dodge_dist_totune [id = 2];  
+  float cur_distToMove_ratio [id = 3];
+  float time_ToMove_ratio [id = 4];
+  float cur_distToMove_goto_ratio [id = 5];
+  float time_ToMove_goto_ratio [id = 6];
+  float cur_distToMove_target_ratio [id = 7];
+  float time_ToMove_target_ratio [id = 8];
+  float angTurn_targetFinding [id = 9];
+  float time_ToTurn_ratio [id = 10];
+  float angTurn_lookAround [id = 11];
+  uint16 ReadyToStart [id = 12];
+}
+
+message opendlv.logic.sensation.CompleteFlag [id = 1197] {
+  uint16 task_completed [id = 1];
+  float task_elapsed [id = 2];
+  float avg_obsstatic_elapsed [id = 3];
+  uint16 obsstatic_timer [id = 4];
+  float avg_obsdynamic_elapsed [id = 5];
+  uint16 obsdynamic_timer [id = 6];
+  float avg_targetfinding_elapsed [id = 7];
+  uint16 targetfinding_timer [id = 8];
+  float avg_frontreaching_elapsed [id = 9];
+  uint16 frontreaching_timer [id = 10];
+  float avg_lookaround_elapsed [id = 11];
+  uint16 lookaround_timer [id = 12];
+  float avg_closeball_elapsed [id = 13];
+  uint16 closeball_timer [id = 14];
+  float avg_closestaticobs_elapsed [id = 15];
+  uint16 closestaticobs_timer [id = 16];
+  uint16 stuck_timer [id = 17];
+}

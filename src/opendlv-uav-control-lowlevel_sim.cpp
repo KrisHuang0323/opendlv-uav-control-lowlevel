@@ -258,28 +258,53 @@
      float dodge_dist_totune = 0.2f;  
      float cur_distToMove_ratio = 1.0f;
      float time_ToMove_ratio = 1.0f;
+     float cur_distToMove_goto_ratio = 1.0f;
+     float time_ToMove_goto_ratio = 1.0f;
+     float cur_distToMove_target_ratio = 1.0f;
+     float time_ToMove_target_ratio = 1.0f;
      float angTurn_targetFinding = 90.0f;
      float time_ToTurn_ratio = 0.0f;
      float angTurn_lookAround = 90.0f;
+     float timer_lookAround = 2;
      bool ReadyToStart = false;
-     auto onRewardRecordRead = [&nTargetTimer, &is_chpad_found, &closeBallTimer, &closeBallCount, &closeStaticObsTimer, &closeStaticObsCount](cluon::data::Envelope &&env){
+     auto onGAParamRead = [&safeDist_ratio, &dodge_dist_totune, &cur_distToMove_ratio,
+                            &time_ToMove_ratio, &cur_distToMove_goto_ratio, &time_ToMove_goto_ratio,
+                            &cur_distToMove_target_ratio, &time_ToMove_target_ratio, &angTurn_targetFinding,
+                            &time_ToTurn_ratio, &angTurn_lookAround, &timer_lookAround,
+                            &ReadyToStart
+                            ](cluon::data::Envelope &&env){
          auto senderStamp = env.senderStamp();
          // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
-         opendlv::logic::sensation::RewardRecord rRecordmessage = cluon::extractMessage<opendlv::logic::sensation::RewardRecord>(std::move(env));
+         opendlv::logic::sensation::GAParam gaParammessage = cluon::extractMessage<opendlv::logic::sensation::GAParam>(std::move(env));
          
          // Store aim direction readings.
         //  std::lock_guard<std::mutex> lck(aimDirectionMutex);
          if ( senderStamp == 0 ){
-            closeBallTimer = rRecordmessage.too_close_ball_timer();
-            closeBallCount = rRecordmessage.too_close_ball_count();
-            closeStaticObsTimer = rRecordmessage.too_close_staticobs_timer();
-            closeStaticObsCount = rRecordmessage.too_close_staticobs_count();
-            nTargetTimer = rRecordmessage.target_found_count();
-            is_chpad_found = rRecordmessage.is_chpad_found();
+            safeDist_ratio = gaParammessage.safeDist_ratio();
+            dodge_dist_totune = gaParammessage.dodge_dist_totune();
+            cur_distToMove_ratio = gaParammessage.cur_distToMove_ratio();
+            time_ToMove_ratio = gaParammessage.time_ToMove_ratio();
+            cur_distToMove_goto_ratio = gaParammessage.cur_distToMove_goto_ratio();
+            time_ToMove_goto_ratio = gaParammessage.time_ToMove_goto_ratio();
+            cur_distToMove_target_ratio = gaParammessage.cur_distToMove_target_ratio();
+            time_ToMove_target_ratio = gaParammessage.time_ToMove_target_ratio();
+            angTurn_targetFinding = gaParammessage.angTurn_targetFinding();
+            time_ToTurn_ratio = gaParammessage.time_ToTurn_ratio();
+            angTurn_lookAround = gaParammessage.angTurn_lookAround();
+            if ( angTurn_lookAround <= 120.0f )
+                timer_lookAround = 0;
+            else if ( angTurn_lookAround > 120.0f && angTurn_lookAround <= 240.0f )
+                timer_lookAround = 1;
+            else
+                timer_lookAround = 2;
+            if ( gaParammessage.ReadyToStart() == 1 )
+                ReadyToStart = true;
+            else
+                ReadyToStart = false;
          }
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
-     od4->dataTrigger(opendlv::logic::sensation::RewardRecord::ID(), onRewardRecordRead);
+     od4->dataTrigger(opendlv::logic::sensation::GAParam::ID(), onGAParamRead);
  
      // Takeoff flags
      bool hasTakeoff = false;
@@ -450,6 +475,9 @@
                 Stopping(od4);
                 hasTakeoff = false;
             }
+            opendlv::logic::sensation::CompleteFlag cFlag;
+            cFlag.task_completed(0);
+            od4.send(cFlag);
             continue;
          }
  
@@ -519,6 +547,26 @@
                     std::cout <<" , average close to static obs elapsed: " << closeStaticObsTimer / closeStaticObsCount << " seconds(s)" << std::endl;
                     std::cout <<" , so far has closed to static obs for " << closeStaticObsCount << " times" << std::endl;
                     std::cout <<" , so far has escaped from stucks for " << nStuckEscapeCount << " times" << std::endl;
+                    
+                    opendlv::logic::sensation::CompleteFlag cFlag;
+                    cFlag.task_completed(1);
+                    cFlag.task_elapsed(elapsed.count());
+                    cFlag.avg_obsstatic_elapsed(ObsStaticElapsed / nObsStaticCount);
+                    cFlag.obsstatic_timer(nObsStaticCount);
+                    cFlag.avg_obsdynamic_elapsed(ObsDynamicElapsed / nObsDynamicCount);
+                    cFlag.obsdynamic_timer(nObsDynamicCount);
+                    cFlag.avg_targetfinding_elapsed(TargetFindingElapsed / nTargetFindingCount);
+                    cFlag.targetfinding_timer(nTargetFindingCount);
+                    cFlag.avg_frontreaching_elapsed(FrontReachingElapsed / nfrontReachingCount);
+                    cFlag.frontreaching_timer(nfrontReachingCount);
+                    cFlag.avg_lookaround_elapsed(LookAroundElapsed / nlookAroundCount);
+                    cFlag.lookaround_timer(nlookAroundCount);
+                    cFlag.avg_closeball_elapsed(closeBallTimer / closeBallCount);
+                    cFlag.closeball_timer(closeBallCount);
+                    cFlag.avg_closestaticobs_elapsed(closeStaticObsTimer / closeStaticObsCount);
+                    cFlag.closestaticobs_timer(closeStaticObsCount);
+                    cFlag.stuck_timer(nStuckEscapeCount);
+                    od4.send(cFlag);
                     break;
                 }
              }
@@ -765,7 +813,7 @@
                  else{
                      std::cout <<" Cur left: "<< left << std::endl;
                      std::cout <<" Cur toRight: "<< cur_validWay.toRight << std::endl;
-                     if ( cur_validWay.toRight >= safe_endreach_LR_dist + 0.2f ){
+                     if ( cur_validWay.toRight >= safe_endreach_LR_dist + dodge_dist_totune ){
                          std::cout <<" Left end meets limit with right direction dodge..." << std::endl;
                          if ( staticDodgeLeft == false ){
                             nObsStaticCount += 1;
@@ -773,7 +821,7 @@
                             obsStaticStartTime = std::chrono::high_resolution_clock::now();
                             staticDodgeLeft = true;
                          }
-                         Goto(od4, 0.2f * std::sin( cur_state_yaw ), - 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
+                         Goto(od4, dodge_dist_totune * std::sin( cur_state_yaw ), - dodge_dist_totune * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
                          continue;
                      }
                      else{
@@ -813,8 +861,8 @@
  
          if ( right <= safe_endreach_ultimate_dist ){
             std::cout <<" Right is super close to something..." << std::endl;
-            if ( left >= 0.2f + safe_endreach_ultimate_dist ){
-                Goto(od4, - 0.2f * std::sin( cur_state_yaw ), 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying rear to dodge
+            if ( left >= dodge_dist_totune + safe_endreach_ultimate_dist ){
+                Goto(od4, - dodge_dist_totune * std::sin( cur_state_yaw ), dodge_dist_totune * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying rear to dodge
             }
             else{
                 Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction                
@@ -840,7 +888,7 @@
                  else{
                      std::cout <<" Cur right: "<< right << std::endl;
                      std::cout <<" Cur toLeft: "<< cur_validWay.toLeft << std::endl;
-                     if ( cur_validWay.toLeft >= safe_endreach_LR_dist + 0.2f ){
+                     if ( cur_validWay.toLeft >= safe_endreach_LR_dist + dodge_dist_totune ){
                          std::cout <<" Right end meets limit with left direction dodge..." << std::endl;
                          if ( staticDodgeRight == false ){
                             staticDodgeRight = true;
@@ -848,7 +896,7 @@
                             obsStaticStartTime = std::chrono::high_resolution_clock::now();
                             nObsStaticCount += 1;
                          }
-                         Goto(od4, - 0.2f * std::sin( cur_state_yaw ), 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
+                         Goto(od4, - dodge_dist_totune * std::sin( cur_state_yaw ), dodge_dist_totune * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
                          continue;
                      }
                      else{
@@ -888,8 +936,8 @@
  
          if ( rear <= safe_endreach_ultimate_dist ){
             std::cout <<" Rear is super close to something..." << std::endl;
-            if ( front >= 0.2f + safe_endreach_ultimate_dist ){
-                Goto(od4, 0.2f * std::cos( cur_state_yaw ), 0.2f * std::sin( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying rear to dodge
+            if ( front >= dodge_dist_totune + safe_endreach_ultimate_dist ){
+                Goto(od4, dodge_dist_totune * std::cos( cur_state_yaw ), dodge_dist_totune * std::sin( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying rear to dodge
             }
             else{
                 Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true);   // Stop flying in current direction                
@@ -955,24 +1003,21 @@
                  std::cout <<" Obstacle gets too close..." << std::endl;            
                  if ( aimDirection_obs < 0.0f ){
                      // If left side has valid way, dodge to it
-                     if ( cur_validWay.toLeft >= safe_endreach_LR_dist + 0.2f ){
+                     if ( cur_validWay.toLeft >= safe_endreach_LR_dist + dodge_dist_totune ){
                          Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0); // Stop first
                          std::cout <<" Try to dodge to the left..." << std::endl;
-                         Goto(od4, - 0.2f * std::sin( cur_state_yaw ), 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
+                         Goto(od4, - dodge_dist_totune * std::sin( cur_state_yaw ), dodge_dist_totune * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
                          std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-                         dodgeDist += 0.2f;
+                         dodgeDist += dodge_dist_totune;
                          on_GoTO_MODE = false;
                          cur_dodgeType = DODGE_LEFT;
                          continue;
                      }
-                     else if ( cur_validWay.toRear >= safe_endreach_LR_dist + 0.2f && has_dodgeToRear == false ){
+                     else if ( cur_validWay.toRear >= safe_endreach_LR_dist + cur_validWay.toRear * cur_distToMove_ratio && has_dodgeToRear == false ){
                          Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0); // Stop first
                          std::cout <<" Try to dodge to the rear..." << std::endl;
-                         cur_distToMove = cur_validWay.toRear;
-                         if ( cur_distToMove >= 1.0f )
-                             time_toMove = 4;
-                         else
-                             time_toMove = 5;
+                         cur_distToMove = cur_validWay.toRear * cur_distToMove_ratio;
+                         time_toMove = time_ToMove_ratio * cur_distToMove;
                          Goto(od4, - cur_distToMove * std::cos( cur_state_yaw ), - cur_distToMove * std::sin( cur_state_yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
                          on_GoTO_MODE = true;
                          cur_dodgeType = DODGE_REAR;
@@ -989,24 +1034,21 @@
                  }
                  else{
                      // If right side has valid way, dodge to it
-                     if ( cur_validWay.toRight >= safe_endreach_LR_dist + 0.2f ){
+                     if ( cur_validWay.toRight >= safe_endreach_LR_dist + dodge_dist_totune ){
                          Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0); // Stop first
                          std::cout <<" Try to dodge to the right..." << std::endl;
-                         Goto(od4, 0.2f * std::sin( cur_state_yaw ), - 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
+                         Goto(od4, dodge_dist_totune * std::sin( cur_state_yaw ), - dodge_dist_totune * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
                          std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-                         dodgeDist -= 0.2f;
+                         dodgeDist -= dodge_dist_totune;
                          on_GoTO_MODE = false;
                          cur_dodgeType = DODGE_RIGHT;
                          continue;
                      }
-                     else if ( cur_validWay.toRear >= safe_endreach_LR_dist + 0.2f && has_dodgeToRear == false ){
+                     else if ( cur_validWay.toRear >= safe_endreach_LR_dist + cur_validWay.toRear * cur_distToMove_ratio && has_dodgeToRear == false ){
                          Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0); // Stop first
                          std::cout <<" Try to dodge to the rear..." << std::endl;
-                         cur_distToMove = cur_validWay.toRear;
-                         if ( cur_distToMove >= 1.0f )
-                             time_toMove = 4;
-                         else
-                             time_toMove = 5;
+                         cur_distToMove = cur_validWay.toRear * cur_distToMove_ratio;
+                         time_toMove = time_ToMove_ratio * cur_distToMove;
                          Goto(od4, - cur_distToMove * std::cos( cur_state_yaw ), - cur_distToMove * std::sin( cur_state_yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
                          on_GoTO_MODE = true;
                          cur_dodgeType = DODGE_REAR;
@@ -1060,24 +1102,21 @@
                  
                  if ( cur_localDodgeType == LOCAL_DODGE_LEFT ){
                      // If left side has valid way, dodge to it
-                     if ( cur_validWay.toLeft >= safe_endreach_LR_dist + 0.2f ){
+                     if ( cur_validWay.toLeft >= safe_endreach_LR_dist + dodge_dist_totune ){
                          // Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
                          std::cout <<" Try to dodge to the left..." << std::endl;
-                         Goto(od4, - 0.2f * std::sin( cur_state_yaw ), 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
+                         Goto(od4, - dodge_dist_totune * std::sin( cur_state_yaw ), dodge_dist_totune * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying left to dodge
                          std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-                         dodgeDist += 0.2f;
+                         dodgeDist += dodge_dist_totune;
                          on_GoTO_MODE = false;
                          cur_dodgeType = DODGE_LEFT;
                          continue;
                      }
-                     else if ( cur_validWay.toRear >= safe_endreach_LR_dist + 0.2f && has_dodgeToRear == false ){
+                     else if ( cur_validWay.toRear >= safe_endreach_LR_dist + cur_validWay.toRear * cur_distToMove_ratio && has_dodgeToRear == false ){
                          // Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
                          std::cout <<" Try to dodge to the rear..." << std::endl;
-                         cur_distToMove = cur_validWay.toRear;
-                         if ( cur_distToMove >= 1.0f )
-                             time_toMove = 4;
-                         else
-                             time_toMove = 5;
+                         cur_distToMove = cur_validWay.toRear * cur_distToMove_ratio;
+                         time_toMove = time_ToMove_ratio * cur_distToMove;
                          Goto(od4, - cur_distToMove * std::cos( cur_state_yaw ), - cur_distToMove * std::sin( cur_state_yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
                          on_GoTO_MODE = true;
                          cur_dodgeType = DODGE_REAR;
@@ -1095,24 +1134,21 @@
                  }
                  else{
                      // If right side has valid way, dodge to it
-                     if ( cur_validWay.toRight >= safe_endreach_LR_dist + 0.2f ){
+                     if ( cur_validWay.toRight >= safe_endreach_LR_dist + dodge_dist_totune ){
                          // Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
                          std::cout <<" Try to dodge to the right..." << std::endl;
-                         Goto(od4, 0.2f * std::sin( cur_state_yaw ), - 0.2f * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
+                         Goto(od4, dodge_dist_totune * std::sin( cur_state_yaw ), - dodge_dist_totune * std::cos( cur_state_yaw ), 0.0f, 0.0f, 0, 1, true);    // Flying right to dodge
                          std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-                         dodgeDist -= 0.2f;
+                         dodgeDist -= dodge_dist_totune;
                          on_GoTO_MODE = false;
                          cur_dodgeType = DODGE_RIGHT;
                          continue;
                      }
-                     else if ( cur_validWay.toRear >= safe_endreach_LR_dist + 0.2f && has_dodgeToRear == false ){
+                     else if ( cur_validWay.toRear >= safe_endreach_LR_dist + cur_validWay.toRear * cur_distToMove_ratio && has_dodgeToRear == false ){
                          // Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
                          std::cout <<" Try to dodge to the rear..." << std::endl;
-                         cur_distToMove = cur_validWay.toRear;
-                         if ( cur_distToMove >= 1.0f )
-                             time_toMove = 4;
-                         else
-                             time_toMove = 5;
+                         cur_distToMove = cur_validWay.toRear * cur_distToMove_ratio;
+                         time_toMove = time_ToMove_ratio * cur_distToMove;
                          Goto(od4, - cur_distToMove * std::cos( cur_state_yaw ), - cur_distToMove * std::sin( cur_state_yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
                          on_GoTO_MODE = true;
                          cur_dodgeType = DODGE_REAR;
@@ -1279,16 +1315,18 @@
                  Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false, false);
  
                  if ( aimDirection_to_reach > 0.0f ){    
-                     float angTurn = 90.0f / 180.0f * M_PI;
+                     float angTurn = angTurn_targetFinding / 180.0f * M_PI;
+                     int16_t time_toTurn = std::static_cast<int>(std::round( ( angTurn + 10.0f / 180.0f * M_PI ) * time_ToTurn_ratio ));
                      cur_targetCheckState.ang_toTurn = angTurn;
                      cur_targetCheckState.startAngle = cur_state_yaw;    
-                     Goto(od4, 0.0f, 0.0f, 0.0f, angTurn + 10.0f / 180.0f * M_PI, 4); 
+                     Goto(od4, 0.0f, 0.0f, 0.0f, angTurn + 10.0f / 180.0f * M_PI, time_toTurn); 
                  }
                  else{
-                     float angTurn = -90.0f / 180.0f * M_PI;
+                     float angTurn = -angTurn_targetFinding / 180.0f * M_PI;
+                     int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn - 10.0f / 180.0f * M_PI ) * time_ToTurn_ratio ));
                      cur_targetCheckState.ang_toTurn = angTurn;
                      cur_targetCheckState.startAngle = cur_state_yaw;    
-                     Goto(od4, 0.0f, 0.0f, 0.0f, angTurn - 10.0f / 180.0f * M_PI, 4);
+                     Goto(od4, 0.0f, 0.0f, 0.0f, angTurn - 10.0f / 180.0f * M_PI, time_toTurn);
                  }
                  std::cout <<" Angle to turn: " << cur_targetCheckState.ang_toTurn << std::endl;   
                  cur_targetCheckState.aimTurnStarted = true;   
@@ -1331,16 +1369,18 @@
 
                          float angDev = std::abs( angleDifference( cur_targetCheckState.startAngle, cur_state_yaw ) );
                          if ( cur_targetCheckState.ang_toTurn > 0.0f ){
-                             float angTurn = 90.0f / 180.0f * M_PI - angDev;
+                             float angTurn = angTurn_targetFinding / 180.0f * M_PI - angDev;
+                             int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn + 10.0f / 180.0f * M_PI ) * time_ToTurn_ratio ));
                              cur_targetCheckState.ang_toTurn = angTurn;
                              cur_targetCheckState.startAngle = cur_state_yaw;    
-                             Goto(od4, 0.0f, 0.0f, 0.0f, angTurn + 10.0f / 180.0f * M_PI, 4);                             
+                             Goto(od4, 0.0f, 0.0f, 0.0f, angTurn + 10.0f / 180.0f * M_PI, time_toTurn);                             
                          }
                          else{
-                             float angTurn = - ( 90.0f / 180.0f * M_PI - angDev );
+                             float angTurn = - ( angTurn_targetFinding / 180.0f * M_PI - angDev );
+                             int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn - 10.0f / 180.0f * M_PI ) * time_ToTurn_ratio ));
                              cur_targetCheckState.ang_toTurn = angTurn;
                              cur_targetCheckState.startAngle = cur_state_yaw;    
-                             Goto(od4, 0.0f, 0.0f, 0.0f, angTurn - 10.0f / 180.0f * M_PI, 4);          
+                             Goto(od4, 0.0f, 0.0f, 0.0f, angTurn - 10.0f / 180.0f * M_PI, time_toTurn);          
                          } 
                          on_TURNING_MODE = true;
                          cur_targetCheckState.oriAimDirection =  aimDirection_to_reach;
@@ -1430,7 +1470,8 @@
                             if ( angleDifference( cur_state_yaw, pair_cand.angle ) < 0.0f ){
                                 angTurn -= 10.0f / 180.0f * M_PI;
                             }
-                            Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 2);
+                            int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                            Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                             cur_targetCheckState.turnStarted = true;
                             break;
                          }
@@ -1481,7 +1522,8 @@
                          if ( angleDifference( yaw, cur_targetCheckState.targetAngle ) < 0.0f ){
                              angTurn -= 10.0f / 180.0f * M_PI;
                          }
-                         Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 2); 
+                         int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                         Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn); 
                          on_TURNING_MODE = true;
                          continue;
                      }
@@ -1546,7 +1588,8 @@
                                  if ( angleDifference( yaw, pair_cand.angle ) < 0.0f ){
                                      angTurn -= 10.0f / 180.0f * M_PI;
                                  }
-                                 Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 2);
+                                 int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                                 Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                                  break;
                              }
                          }
@@ -1683,18 +1726,11 @@
                  nfrontReachingCount += 1;
                  Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false);
                  std::cout <<" Start go to action with front: " << front << std::endl;
-                 cur_distToMove = front - safe_endreach_dist / 2.0f;
-                 if ( cur_distToMove >= 1.0f )
-                     time_toMove = 4;
-                 else
-                     time_toMove = 5;
+                 cur_distToMove = front * cur_distToMove_goto_ratio;
+                 time_toMove = time_ToMove_goto_ratio * cur_distToMove;
                  if ( cur_targetCheckState.pointToTarget ){
-                    cur_distToMove = 0.7f;
-                    time_toMove = 2;
-                    if ( front < 0.7f){
-                        cur_distToMove = front - safe_endreach_dist / 2.0f;
-                        time_toMove = 5;
-                    }
+                    cur_distToMove = front * cur_distToMove_target_ratio;
+                    time_toMove = time_ToMove_target_ratio * cur_distToMove;
                  }
                  Goto(od4, cur_distToMove * std::cos( cur_state_yaw ), cur_distToMove * std::sin( cur_state_yaw ), 0.0f, 0.0f, time_toMove);
                  cur_pathReachingState.pathOnGoing = true;
@@ -1711,8 +1747,8 @@
                          // Reset flags
                          on_GoTO_MODE = false;
                      }
-                     else if ( std::abs( cur_pathReachingState.startFront - front ) >= 0.6f && front < cur_pathReachingState.startFront ){
-                         std::cout <<" Reach target with 0.6 range of current front: " << front << std::endl;
+                     else if ( std::abs( cur_pathReachingState.startFront - front ) >= cur_distToMove - 0.1f && front < cur_pathReachingState.startFront ){
+                         std::cout <<" Reach target with in target range of current front: " << front << std::endl;
                          Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false);
  
                          // Reset flags
@@ -1829,7 +1865,8 @@
                  cur_lookAroundState.preAngle = cur_state_yaw + M_PI;
              }
              cur_lookAroundState.startAngle = cur_state_yaw;
-             Goto(od4, 0.0f, 0.0f, 0.0f, 120.0f / 180.0f * M_PI, 2);
+             int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn_lookAround / 180.0f * M_PI ) * time_ToTurn_ratio ));
+             Goto(od4, 0.0f, 0.0f, 0.0f, angTurn_lookAround / 180.0f * M_PI, time_toTurn);
              cur_lookAroundState.clearPathCheckStarted = true;
              on_TURNING_MODE = true;
          }
@@ -1837,8 +1874,9 @@
              if ( std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state_yaw ) ) < 110.0f / 180.0f * M_PI ){
                  if ( has_possibleInterrupt || has_possibleInterrupt_dynamic ){
                      std::cout <<" Some targets occur, so try to look up again..." << std::endl;
-                     float angTurn = 120.0f / 180.0f * M_PI - std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state_yaw ) );
-                     Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 2);
+                     float angTurn = angTurn_lookAround / 180.0f * M_PI - std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state_yaw ) );
+                     int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                     Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                      on_TURNING_MODE = true;
 
                      std::chrono::duration<double> elapsed;
@@ -1896,7 +1934,7 @@
                  // Stop the turning action
                  Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false);
  
-                 if ( cur_lookAroundState.nTimer < 2 ){
+                 if ( cur_lookAroundState.nTimer < timer_lookAround ){
                      cur_lookAroundState.clearPathCheckStarted = false;
                      cur_lookAroundState.nTimer += 1;
                      continue;
@@ -1994,7 +2032,8 @@
                          if ( angleDifference( cur_state_yaw, pair_cand.angle ) < 0.0f ){
                              angTurn -= 10.0f / 180.0f * M_PI;
                          }
-                         Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 1);
+                         int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                         Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                          std::cout <<" Found a path to go to and start turning to target angle with target: " << pair_cand.angle << std::endl;
                          cur_lookAroundState.turnStarted = true;
                          break;
@@ -2015,7 +2054,8 @@
                      if ( angleDifference( cur_state_yaw, cur_lookAroundState.preAngle ) < 0.0f ){
                          angTurn -= 10.0f / 180.0f * M_PI;
                      }
-                     Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 3);
+                     int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                     Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                      std::cout <<" No path to go to so start turning to the previous target angle with target: " << cur_lookAroundState.preAngle << std::endl;
                      cur_lookAroundState.turnStarted = true;
                  }
@@ -2029,7 +2069,8 @@
                      if ( angleDifference( cur_state_yaw, cur_lookAroundState.targetAngle ) < 0.0f ){
                          angTurn -= 10.0f / 180.0f * M_PI;
                      }
-                     Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 3);
+                     int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                     Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                      on_TURNING_MODE = true;
 
                      std::chrono::duration<double> elapsed;
@@ -2075,10 +2116,7 @@
  
                  // If current front is not goable
                  float safe_dist{0.0f};
-                 if ( front >= 1.0f )
-                     safe_dist = safe_endreach_dist + front / 4 + 0.35f;
-                 else
-                     safe_dist = safe_endreach_dist;
+                 safe_dist = safe_endreach_dist + safeDist_ratio * front;
                  if ( front <= safe_dist ){
                      std::cout <<" Turn to the target angle, But current angle is not goable..." << std::endl;
                      angleFrontState state;
@@ -2183,7 +2221,8 @@
                              if ( angleDifference( cur_state_yaw, pair_cand.angle ) < 0.0f ){
                                  angTurn -= 10.0f / 180.0f * M_PI;
                              }
-                             Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 1);
+                             int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                             Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                              std::cout <<" Found a path to go to and start turning to target angle with target: " << pair_cand.angle << std::endl;
                              break;
                          }
@@ -2206,7 +2245,8 @@
                      if ( angleDifference( cur_state_yaw, cur_lookAroundState.preAngle ) < 0.0f ){
                          angTurn -= 10.0f / 180.0f * M_PI;
                      }
-                     Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, 3);
+                     int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                     Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                      std::cout <<" No path to go to so start turning to the previous target angle with target: " << cur_lookAroundState.preAngle << std::endl;
                      continue;                        
                  }

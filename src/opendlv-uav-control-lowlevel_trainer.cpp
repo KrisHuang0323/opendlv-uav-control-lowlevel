@@ -16,6 +16,18 @@
  */
 
 #include <iostream>
+ #include <cstdint>
+ #include <memory>
+ #include <mutex>
+ #include <thread>
+ #include <array>
+ #include <string>
+ #include <sstream>
+ #include <vector>
+ #include <iterator>
+ #include <cmath>
+ #include <random>
+ #include <chrono>
 
 #include "cluon-complete.hpp"
 #include "opendlv-standard-message-set.hpp"
@@ -56,7 +68,7 @@ int32_t main(int32_t argc, char **argv) {
   auto commandlineArguments = cluon::getCommandlineArguments(argc, argv);
   if (0 == commandlineArguments.count("j")) {
     std::cerr << argv[0] 
-      << " is a trainer for a lawn mower control algorithm." << std::endl;
+      << " is a trainer for a crazyflie control algorithm." << std::endl;
     std::cerr << "Usage:   " << argv[0] 
       << " --j=<Number of parallel threads (simulations)>" 
       << " [--cid-start=<CID interval start (end: cid-start+j). Default: 111>]" 
@@ -71,7 +83,7 @@ int32_t main(int32_t argc, char **argv) {
 
     uint32_t generationCount = 10000;
     tinyso::CrossoverMethod crossoverMethod = tinyso::CrossoverMethod::Split;
-    uint32_t individualLength = 6;
+    uint32_t individualLength = 12;
     uint32_t eliteSize = 1;
     uint32_t populationSize = 30;
     uint32_t tournamentSize = 2;
@@ -94,7 +106,7 @@ int32_t main(int32_t argc, char **argv) {
           std::make_tuple());
     }
 
-    auto evaluate{[&cidStart, &jobs, &cidLocks, &simMaxTime, &rg, &randomSeed, &terminate](
+    auto evaluate{[&cidStart, &jobs, &cidLocks, &terminate](
         tinyso::Individual const &ind, uint32_t const) -> double
       {
         uint32_t cid = cidStart;
@@ -107,56 +119,91 @@ int32_t main(int32_t argc, char **argv) {
         }
 
         double eta{1.0};
+
+        struct flagStruct{
+          int16_t task_completed{0};
+          float task_elapsed{0};
+          float avg_obsstatic_elapsed{0};
+          int16_t obsstatic_timer{0};
+          float avg_obsdynamic_elapsed{0};
+          int16_t obsdynamic_timer{0};
+          float avg_targetfinding_elapsed{0};
+          int16_t targetfinding_timer{0};
+          float avg_frontreaching_elapsed{0};
+          int16_t frontreaching_timer{0};
+          float avg_lookaround_elapsed{0};
+          int16_t lookaround_timer{0};
+          float avg_closeball_elapsed{0};
+          int16_t closeball_timer{0};
+          float avg_closestaticobs_elapsed{0};
+          int16_t closestaticobs_timer{0};
+          int16_t stuck_timer{0};
+        };
+        flagStruct cur_flagStruct;
+
         {
           cluon::OD4Session od4(cid);
           bool isRunning{true};
 
-          auto onSensors{[&od4, &ind, &isRunning, &simMaxTime](
+          auto onFlagRead{[&od4, &cur_flagStruct](
               cluon::data::Envelope &&envelope)
             {
-              auto msg = cluon::extractMessage<tme290::grass::Sensors>(
+              auto msg = cluon::extractMessage<opendlv::logic::sensation::CompleteFlag>(
                   std::move(envelope));
 
-              if ((msg.time() > simMaxTime) || (msg.battery() <= 0.0)) {
-                isRunning = false;
-                return;
+              cur_flagStruct.task_completed = msg.task_completed();
+              if ( cur_flagStruct.task_completed == 1 ){
+                cur_flagStruct.task_elapsed = msg.task_elapsed();
+                cur_flagStruct.avg_obsstatic_elapsed = msg.avg_obsstatic_elapsed();
+                cur_flagStruct.obsstatic_timer = msg.obsstatic_timer();
+                cur_flagStruct.avg_obsdynamic_elapsed = msg.avg_obsdynamic_elapsed();
+                cur_flagStruct.obsdynamic_timer = msg.obsdynamic_timer();
+                cur_flagStruct.avg_targetfinding_elapsed = msg.avg_targetfinding_elapsed();
+                cur_flagStruct.targetfinding_timer = msg.targetfinding_timer();
+                cur_flagStruct.avg_frontreaching_elapsed = msg.avg_frontreaching_elapsed();
+                cur_flagStruct.frontreaching_timer = msg.frontreaching_timer();
+                cur_flagStruct.avg_lookaround_elapsed = msg.avg_lookaround_elapsed();
+                cur_flagStruct.lookaround_timer = msg.lookaround_timer();
+                cur_flagStruct.avg_closeball_elapsed = msg.avg_closeball_elapsed();
+                cur_flagStruct.closeball_timer = msg.closeball_timer();
+                cur_flagStruct.avg_closestaticobs_elapsed = msg.avg_closestaticobs_elapsed();
+                cur_flagStruct.closestaticobs_timer = msg.closestaticobs_timer();
+                cur_flagStruct.stuck_timer = msg.stuck_timer();
               }
-
-              auto control = step(msg, ind);
-              od4.send(control);
+              else{
+                // Do nothing
+              }
             }};
 
-          auto onStatus{[&eta](
-              cluon::data::Envelope &&envelope)
-            {
-              auto msg = cluon::extractMessage<tme290::grass::Status>(
-                  std::move(envelope));
-              eta = msg.grassMax() * msg.grassMean();
-            }};
+          od4.dataTrigger(opendlv::logic::sensation::CompleteFlag::ID(), onFlagRead);
 
-          od4.dataTrigger(tme290::grass::Sensors::ID(), onSensors);
-          od4.dataTrigger(tme290::grass::Status::ID(), onStatus);
+          // Give the param individuals
+          opendlv::logic::sensation::GAParam gaParam;
+          gaParam.safeDist_ratio = ind[0];
+          gaParam.dodge_dist_totune = ind[1];
+          gaParam.cur_distToMove_ratio = ind[2];
+          gaParam.time_ToMove_ratio = ind[3];
+          gaParam.cur_distToMove_goto_ratio = ind[4];
+          gaParam.time_ToMove_goto_ratio = ind[5];
+          gaParam.cur_distToMove_target_ratio = ind[6];
+          gaParam.time_ToMove_target_ratio = ind[7];
+          gaParam.angTurn_targetFinding = ind[8];
+          gaParam.time_ToTurn_ratio = ind[9];
+          gaParam.angTurn_lookAround = ind[10];
+          gaParam.ReadyToStart(1);
+          od4.send(gaParam);
 
-          tme290::grass::Control control;
-          control.command(0);
-          od4.send(control);
-
-          while (isRunning && od4.isRunning()) {
+          while (cur_flagStruct.task_completed == 0 && od4.isRunning()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
           }
 
-          if (!od4.isRunning()) {
+          if (!od4.isRunning() || cur_flagStruct.task_completed == 1) {
             terminate = true;
-          }
 
-          tme290::grass::Restart restart;
-          if (!randomSeed) {
-            restart.seed(1234);
-          } else {
-            std::uniform_int_distribution<unsigned long long> dist;
-            restart.seed(dist(rg));
+            opendlv::logic::sensation::GAParam gaParam;
+            gaParam.ReadyToStart(0);
+            od4.send(gaParam);
           }
-          od4.send(restart);
 
           std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
