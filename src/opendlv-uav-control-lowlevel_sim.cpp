@@ -30,6 +30,7 @@
  #include <cmath>
  #include <random>
  #include <chrono>
+ #include <algorithm>
  
  std::mutex od4Mutex; // Mutex to protect shared access to od4
  void Takeoff(std::shared_ptr<cluon::OD4Session> od4, float height, int duration){
@@ -101,6 +102,11 @@
  
  float wrap_angle(float angle) {
      return (angle > M_PI) ? (angle - 2 * M_PI) : angle;
+ }
+
+ template<typename T>
+ constexpr const T& clamp(const T& v, const T& lo, const T& hi) {
+     return (v < lo) ? lo : (hi < v) ? hi : v;
  }
  
  /*
@@ -262,9 +268,9 @@
      float time_ToMove_goto_ratio = 1.0f;
      float cur_distToMove_target_ratio = 1.0f;
      float time_ToMove_target_ratio = 1.0f;
-     float angTurn_targetFinding = 90.0f;
+     float angTurn_targetFinding = 90.0f / 180.0f * M_PI;
      float time_ToTurn_ratio = 0.0f;
-     float angTurn_lookAround = 90.0f;
+     float angTurn_lookAround = 90.0f / 180.0f * M_PI;
      float timer_lookAround = 2;
      bool ReadyToStart = false;
      auto onGAParamRead = [&safeDist_ratio, &dodge_dist_totune, &cur_distToMove_ratio,
@@ -290,10 +296,12 @@
             time_ToMove_target_ratio = gaParammessage.time_ToMove_target_ratio();
             angTurn_targetFinding = gaParammessage.angTurn_targetFinding();
             time_ToTurn_ratio = gaParammessage.time_ToTurn_ratio();
+            std::cout << "Received param of time to turn ratio: " << time_ToTurn_ratio << std::endl;
             angTurn_lookAround = gaParammessage.angTurn_lookAround();
-            if ( angTurn_lookAround <= 120.0f )
+            std::cout << "Received param of angle to turn of look around: " << angTurn_lookAround << std::endl;
+            if ( angTurn_lookAround <= 120.0f / 180.0f * M_PI )
                 timer_lookAround = 0;
-            else if ( angTurn_lookAround > 120.0f && angTurn_lookAround <= 240.0f )
+            else if ( angTurn_lookAround > 120.0f / 180.0f * M_PI && angTurn_lookAround <= 240.0f / 180.0f * M_PI )
                 timer_lookAround = 1;
             else
                 timer_lookAround = 2;
@@ -470,7 +478,7 @@
 
          if ( ReadyToStart == false ){
             // Terminate the loop
-            std::cout <<" Time to terminate the flying..." << std::endl;
+            // std::cout <<" Time to terminate the flying..." << std::endl;
             if ( hasTakeoff ){
                 Landing(od4, 0.0f, 3);
                 Stopping(od4);
@@ -1208,7 +1216,7 @@
                          Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0); // Stop first
                          std::cout <<" Try to dodge to the rear..." << std::endl;
                          cur_distToMove = cur_validWay.toRear * cur_distToMove_ratio;
-                         time_toMove = time_ToMove_ratio * cur_distToMove;
+                         time_toMove = static_cast<int>(std::round(clamp<double>(time_ToMove_ratio * cur_distToMove, 2.0f, 5.0f)));
                          Goto(od4, - cur_distToMove * std::cos( cur_state_yaw ), - cur_distToMove * std::sin( cur_state_yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
                          on_GoTO_MODE = true;
                          cur_dodgeType = DODGE_REAR;
@@ -1239,7 +1247,7 @@
                          Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0); // Stop first
                          std::cout <<" Try to dodge to the rear..." << std::endl;
                          cur_distToMove = cur_validWay.toRear * cur_distToMove_ratio;
-                         time_toMove = time_ToMove_ratio * cur_distToMove;
+                         time_toMove = static_cast<int>(std::round(clamp<double>(time_ToMove_ratio * cur_distToMove, 2.0f, 5.0f)));
                          Goto(od4, - cur_distToMove * std::cos( cur_state_yaw ), - cur_distToMove * std::sin( cur_state_yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
                          on_GoTO_MODE = true;
                          cur_dodgeType = DODGE_REAR;
@@ -1307,7 +1315,7 @@
                          // Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
                          std::cout <<" Try to dodge to the rear..." << std::endl;
                          cur_distToMove = cur_validWay.toRear * cur_distToMove_ratio;
-                         time_toMove = time_ToMove_ratio * cur_distToMove;
+                         time_toMove = static_cast<int>(std::round(clamp<double>(time_ToMove_ratio * cur_distToMove, 2.0f, 5.0f)));
                          Goto(od4, - cur_distToMove * std::cos( cur_state_yaw ), - cur_distToMove * std::sin( cur_state_yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
                          on_GoTO_MODE = true;
                          cur_dodgeType = DODGE_REAR;
@@ -1339,7 +1347,7 @@
                          // Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, true); // Stop first
                          std::cout <<" Try to dodge to the rear..." << std::endl;
                          cur_distToMove = cur_validWay.toRear * cur_distToMove_ratio;
-                         time_toMove = time_ToMove_ratio * cur_distToMove;
+                         time_toMove = static_cast<int>(std::round(clamp<double>(time_ToMove_ratio * cur_distToMove, 2.0f, 5.0f)));
                          Goto(od4, - cur_distToMove * std::cos( cur_state_yaw ), - cur_distToMove * std::sin( cur_state_yaw ), 0.0f, 0.0f, time_toMove);    // Flying right to dodge
                          on_GoTO_MODE = true;
                          cur_dodgeType = DODGE_REAR;
@@ -1506,15 +1514,15 @@
                  Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false, false);
  
                  if ( aimDirection_to_reach > 0.0f ){    
-                     float angTurn = angTurn_targetFinding / 180.0f * M_PI;
-                     int16_t time_toTurn = static_cast<int>(std::round( ( angTurn + 10.0f / 180.0f * M_PI ) * time_ToTurn_ratio ));
+                     float angTurn = angTurn_targetFinding;
+                     int16_t time_toTurn = static_cast<int>(std::round( clamp<double>(( angTurn + 10.0f / 180.0f * M_PI ) * time_ToTurn_ratio, 1.0f, 5.0f)));
                      cur_targetCheckState.ang_toTurn = angTurn;
                      cur_targetCheckState.startAngle = cur_state_yaw;    
                      Goto(od4, 0.0f, 0.0f, 0.0f, angTurn + 10.0f / 180.0f * M_PI, time_toTurn); 
                  }
                  else{
-                     float angTurn = -angTurn_targetFinding / 180.0f * M_PI;
-                     int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn - 10.0f / 180.0f * M_PI ) * time_ToTurn_ratio ));
+                     float angTurn = -angTurn_targetFinding;
+                     int16_t time_toTurn = static_cast<int>(std::round( clamp<double>(std::abs( angTurn - 10.0f / 180.0f * M_PI ) * time_ToTurn_ratio, 1.0f, 5.0f) ));
                      cur_targetCheckState.ang_toTurn = angTurn;
                      cur_targetCheckState.startAngle = cur_state_yaw;    
                      Goto(od4, 0.0f, 0.0f, 0.0f, angTurn - 10.0f / 180.0f * M_PI, time_toTurn);
@@ -1560,15 +1568,15 @@
 
                          float angDev = std::abs( angleDifference( cur_targetCheckState.startAngle, cur_state_yaw ) );
                          if ( cur_targetCheckState.ang_toTurn > 0.0f ){
-                             float angTurn = angTurn_targetFinding / 180.0f * M_PI - angDev;
-                             int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn + 10.0f / 180.0f * M_PI ) * time_ToTurn_ratio ));
+                             float angTurn = angTurn_targetFinding - angDev;
+                             int16_t time_toTurn = static_cast<int>(std::round( clamp<double>(std::abs( angTurn + 10.0f / 180.0f * M_PI ) * time_ToTurn_ratio, 1.0f, 5.0f) ));
                              cur_targetCheckState.ang_toTurn = angTurn;
                              cur_targetCheckState.startAngle = cur_state_yaw;    
                              Goto(od4, 0.0f, 0.0f, 0.0f, angTurn + 10.0f / 180.0f * M_PI, time_toTurn);                             
                          }
                          else{
-                             float angTurn = - ( angTurn_targetFinding / 180.0f * M_PI - angDev );
-                             int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn - 10.0f / 180.0f * M_PI ) * time_ToTurn_ratio ));
+                             float angTurn = - ( angTurn_targetFinding - angDev );
+                             int16_t time_toTurn = static_cast<int>(std::round( clamp<double>(std::abs( angTurn - 10.0f / 180.0f * M_PI ) * time_ToTurn_ratio, 1.0f, 5.0f) ));
                              cur_targetCheckState.ang_toTurn = angTurn;
                              cur_targetCheckState.startAngle = cur_state_yaw;    
                              Goto(od4, 0.0f, 0.0f, 0.0f, angTurn - 10.0f / 180.0f * M_PI, time_toTurn);          
@@ -1661,7 +1669,7 @@
                             if ( angleDifference( cur_state_yaw, pair_cand.angle ) < 0.0f ){
                                 angTurn -= 10.0f / 180.0f * M_PI;
                             }
-                            int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                            int16_t time_toTurn = static_cast<int>(std::round( clamp<double>(std::abs( angTurn ) * time_ToTurn_ratio, 1.0f, 5.0f) ));
                             Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                             cur_targetCheckState.turnStarted = true;
                             break;
@@ -1713,7 +1721,7 @@
                          if ( angleDifference( yaw, cur_targetCheckState.targetAngle ) < 0.0f ){
                              angTurn -= 10.0f / 180.0f * M_PI;
                          }
-                         int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                         int16_t time_toTurn = static_cast<int>(std::round( clamp<double>(std::abs( angTurn ) * time_ToTurn_ratio, 1.0f, 5.0f) ));
                          Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn); 
                          on_TURNING_MODE = true;
                          continue;
@@ -1779,7 +1787,7 @@
                                  if ( angleDifference( yaw, pair_cand.angle ) < 0.0f ){
                                      angTurn -= 10.0f / 180.0f * M_PI;
                                  }
-                                 int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                                 int16_t time_toTurn = static_cast<int>(std::round( clamp<double>(std::abs( angTurn ) * time_ToTurn_ratio, 1.0f, 5.0f) ));
                                  Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                                  break;
                              }
@@ -1918,10 +1926,10 @@
                  Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false);
                  std::cout <<" Start go to action with front: " << front << std::endl;
                  cur_distToMove = front * cur_distToMove_goto_ratio;
-                 time_toMove = time_ToMove_goto_ratio * cur_distToMove;
+                 time_toMove = static_cast<int>(std::round(clamp<double>(time_ToMove_goto_ratio * cur_distToMove, 2.0f, 5.0f)));
                  if ( cur_targetCheckState.pointToTarget ){
                     cur_distToMove = front * cur_distToMove_target_ratio;
-                    time_toMove = time_ToMove_target_ratio * cur_distToMove;
+                    time_toMove = static_cast<int>(std::round(clamp<double>(time_ToMove_target_ratio * cur_distToMove, 2.0f, 5.0f)));
                  }
                  Goto(od4, cur_distToMove * std::cos( cur_state_yaw ), cur_distToMove * std::sin( cur_state_yaw ), 0.0f, 0.0f, time_toMove);
                  cur_pathReachingState.pathOnGoing = true;
@@ -2056,17 +2064,17 @@
                  cur_lookAroundState.preAngle = cur_state_yaw + M_PI;
              }
              cur_lookAroundState.startAngle = cur_state_yaw;
-             int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn_lookAround / 180.0f * M_PI ) * time_ToTurn_ratio ));
-             Goto(od4, 0.0f, 0.0f, 0.0f, angTurn_lookAround / 180.0f * M_PI, time_toTurn);
+             int16_t time_toTurn = static_cast<int>( std::round( clamp<double>(std::abs( angTurn_lookAround ) * time_ToTurn_ratio, 1.0f, 5.0f) ) );
+             Goto(od4, 0.0f, 0.0f, 0.0f, angTurn_lookAround, time_toTurn);
              cur_lookAroundState.clearPathCheckStarted = true;
              on_TURNING_MODE = true;
          }
          else if ( cur_lookAroundState.turnStarted == false ){
-             if ( std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state_yaw ) ) < angTurn_lookAround / 180.0f * M_PI * 0.92f ){
+             if ( std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state_yaw ) ) < angTurn_lookAround * 0.92f ){
                  if ( has_possibleInterrupt || has_possibleInterrupt_dynamic ){
                      std::cout <<" Some targets occur, so try to look up again..." << std::endl;
-                     float angTurn = angTurn_lookAround / 180.0f * M_PI - std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state_yaw ) );
-                     int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                     float angTurn = angTurn_lookAround - std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state_yaw ) );
+                     int16_t time_toTurn = static_cast<int>(std::round( clamp<double>(std::abs( angTurn ) * time_ToTurn_ratio, 1.0f, 5.0f) ));
                      Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                      on_TURNING_MODE = true;
 
@@ -2101,7 +2109,7 @@
                      continue;
                  }
                  
-                 // std::cout <<" Record target with angle dev: " << std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state_yaw ) ) << ", and vector size: " << angleFrontState_vec.size() << std::endl;
+                //  std::cout <<" Record target with angle dev: " << std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state_yaw ) ) << ", and vector size: " << angleFrontState_vec.size() << std::endl;
                  // Record the angle and front
                  angleFrontState state;
                  state.front = front;
@@ -2223,7 +2231,7 @@
                          if ( angleDifference( cur_state_yaw, pair_cand.angle ) < 0.0f ){
                              angTurn -= 10.0f / 180.0f * M_PI;
                          }
-                         int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                         int16_t time_toTurn = static_cast<int>(std::round( clamp<double>(std::abs( angTurn ) * time_ToTurn_ratio, 1.0f, 5.0f) ));
                          Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                          std::cout <<" Found a path to go to and start turning to target angle with target: " << pair_cand.angle << std::endl;
                          cur_lookAroundState.turnStarted = true;
@@ -2245,7 +2253,7 @@
                      if ( angleDifference( cur_state_yaw, cur_lookAroundState.preAngle ) < 0.0f ){
                          angTurn -= 10.0f / 180.0f * M_PI;
                      }
-                     int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                     int16_t time_toTurn = static_cast<int>(std::round( clamp<double>(std::abs( angTurn ) * time_ToTurn_ratio, 1.0f, 5.0f) ));
                      Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                      std::cout <<" No path to go to so start turning to the previous target angle with target: " << cur_lookAroundState.preAngle << std::endl;
                      cur_lookAroundState.turnStarted = true;
@@ -2260,7 +2268,7 @@
                      if ( angleDifference( cur_state_yaw, cur_lookAroundState.targetAngle ) < 0.0f ){
                          angTurn -= 10.0f / 180.0f * M_PI;
                      }
-                     int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                     int16_t time_toTurn = static_cast<int>(std::round( clamp<double>(std::abs( angTurn ) * time_ToTurn_ratio, 1.0f, 5.0f) ));
                      Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                      on_TURNING_MODE = true;
 
@@ -2412,7 +2420,7 @@
                              if ( angleDifference( cur_state_yaw, pair_cand.angle ) < 0.0f ){
                                  angTurn -= 10.0f / 180.0f * M_PI;
                              }
-                             int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                             int16_t time_toTurn = static_cast<int>(std::round( clamp<double>(std::abs( angTurn ) * time_ToTurn_ratio, 1.0f, 5.0f) ));
                              Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                              std::cout <<" Found a path to go to and start turning to target angle with target: " << pair_cand.angle << std::endl;
                              break;
@@ -2436,7 +2444,7 @@
                      if ( angleDifference( cur_state_yaw, cur_lookAroundState.preAngle ) < 0.0f ){
                          angTurn -= 10.0f / 180.0f * M_PI;
                      }
-                     int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                     int16_t time_toTurn = static_cast<int>(std::round( clamp<double>(std::abs( angTurn ) * time_ToTurn_ratio, 1.0f, 5.0f) ));
                      Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                      std::cout <<" No path to go to so start turning to the previous target angle with target: " << cur_lookAroundState.preAngle << std::endl;
                      continue;                        

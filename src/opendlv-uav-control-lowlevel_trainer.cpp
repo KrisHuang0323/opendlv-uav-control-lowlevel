@@ -209,7 +209,11 @@ int32_t main(int32_t argc, char **argv) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
           } // Wait until task set
           StartTime = std::chrono::high_resolution_clock::now();
-          std::cout << "Start the " << jobs << " thread training..." << std::endl;
+          std::cout << "Start the " << jobs << " thread training..." << std::endl;          
+          std::cout << ", with params: " << std::endl;
+          for (uint32_t i{0}; i < 12; i++) {
+            std::cout << "  param " << i << ": " << ind[i] << std::endl;
+          }
 
           bool hasOverTimeLimit = false;
           bool hasOverRange = false;
@@ -245,7 +249,7 @@ int32_t main(int32_t argc, char **argv) {
             }
 
             if ( cur_pos.x != -4.0f && cur_pos.y != -4.0f ){
-              if ( nCount < 1500 ){
+              if ( nCount < 2000 ){
                 nCount += 1;
               }
               else{
@@ -261,8 +265,11 @@ int32_t main(int32_t argc, char **argv) {
             }            
           }
 
-          if (!od4.isRunning() || cur_flagStruct.task_completed == 1 || hasOverTimeLimit || hasOverRange || hasStuck ) {
+          if ( !od4.isRunning() ){
             terminate = true;
+          }
+
+          if (cur_flagStruct.task_completed == 1 || hasOverTimeLimit || hasOverRange || hasStuck ) {
             std::cout << "The " << jobs << " thread training should stop now" << std::endl;
 
             // Reset param
@@ -288,33 +295,34 @@ int32_t main(int32_t argc, char **argv) {
             std::cout << "The " << jobs << " thread training complete reset..." << std::endl;
           }
 
+          // Elapsed
           if ( hasOverTimeLimit || hasOverRange || hasStuck ){
             eta = 300;
           }
           else{
-            // Elapsed
             eta += std::isnan(cur_flagStruct.task_elapsed) ? 0.0 : cur_flagStruct.task_elapsed;
             eta += std::isnan(cur_flagStruct.avg_obsstatic_elapsed) ? 0.0 : cur_flagStruct.avg_obsstatic_elapsed;
             eta += std::isnan(cur_flagStruct.avg_obsdynamic_elapsed) ? 0.0 : cur_flagStruct.avg_obsdynamic_elapsed;
             eta += std::isnan(cur_flagStruct.avg_lookaround_elapsed) ? 0.0 : cur_flagStruct.avg_lookaround_elapsed;
             eta += std::isnan(cur_flagStruct.avg_targetfinding_elapsed) ? 0.0 : 0.5 * cur_flagStruct.avg_targetfinding_elapsed;
             eta += std::isnan(cur_flagStruct.avg_frontreaching_elapsed) ? 0.0 : 0.5 * cur_flagStruct.avg_frontreaching_elapsed;
-
-            // Count
-            eta += cur_flagStruct.obsstatic_timer;
-            eta += cur_flagStruct.obsdynamic_timer;
-            eta += cur_flagStruct.lookaround_timer;
-            eta += 0.5*cur_flagStruct.targetfinding_timer;
-            eta += 0.5*cur_flagStruct.frontreaching_timer;
-            eta += cur_flagStruct.closeball_timer;
-            eta += cur_flagStruct.closestaticobs_timer;
-
-            // Percentage
-            eta += ( std::isnan(cur_flagStruct.avg_obsstatic_elapsed) ? 0.0 : cur_flagStruct.avg_obsstatic_elapsed * cur_flagStruct.obsstatic_timer 
-                  + std::isnan(cur_flagStruct.avg_obsdynamic_elapsed) ? 0.0 : cur_flagStruct.avg_obsdynamic_elapsed * cur_flagStruct.obsdynamic_timer
-                  + std::isnan(cur_flagStruct.avg_lookaround_elapsed) ? 0.0 : cur_flagStruct.avg_lookaround_elapsed * cur_flagStruct.lookaround_timer ) 
-                  / cur_flagStruct.task_elapsed;   
           }
+
+          // Count
+          eta += cur_flagStruct.obsstatic_timer >= 0.0f ? cur_flagStruct.obsstatic_timer : 10;
+          eta += cur_flagStruct.obsdynamic_timer >= 0.0f ? cur_flagStruct.obsdynamic_timer : 10;
+          eta += cur_flagStruct.lookaround_timer >= 0.0f ? cur_flagStruct.lookaround_timer : 30;
+          eta += cur_flagStruct.targetfinding_timer >= 0.0f ? 0.5*cur_flagStruct.targetfinding_timer : 15;
+          eta += cur_flagStruct.frontreaching_timer >= 0.0f ? 0.5*cur_flagStruct.frontreaching_timer : 15;
+          eta += cur_flagStruct.closeball_timer;
+          eta += cur_flagStruct.closestaticobs_timer;
+
+          // Percentage
+          float percentage = ( std::isnan(cur_flagStruct.avg_obsstatic_elapsed) ? 0.0 : cur_flagStruct.avg_obsstatic_elapsed * cur_flagStruct.obsstatic_timer 
+          + std::isnan(cur_flagStruct.avg_obsdynamic_elapsed) ? 0.0 : cur_flagStruct.avg_obsdynamic_elapsed * cur_flagStruct.obsdynamic_timer
+          + std::isnan(cur_flagStruct.avg_lookaround_elapsed) ? 0.0 : cur_flagStruct.avg_lookaround_elapsed * cur_flagStruct.lookaround_timer ) 
+          / cur_flagStruct.task_elapsed;
+          eta += percentage > 0.0f ? percentage : 1.0f;   
           
           std::cout << "The " << jobs << " thread training complete fitness computing: " << 1.0 / eta << std::endl;
           std::this_thread::sleep_for(std::chrono::milliseconds(10));
