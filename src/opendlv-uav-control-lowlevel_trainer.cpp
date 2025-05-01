@@ -99,6 +99,9 @@ int32_t main(int32_t argc, char **argv) {
 
     bool terminate{false};
 
+    auto StartTime = std::chrono::high_resolution_clock::now();
+    auto EndTime = std::chrono::high_resolution_clock::now();
+
     std::map<uint32_t, std::mutex> cidLocks;
     for (uint32_t i{0}; i < jobs; i++) {
       uint32_t cid = cidStart + i;
@@ -106,7 +109,7 @@ int32_t main(int32_t argc, char **argv) {
           std::make_tuple());
     }
 
-    auto evaluate{[&cidStart, &jobs, &cidLocks, &terminate](
+    auto evaluate{[&cidStart, &jobs, &cidLocks, &terminate, &StartTime, &EndTime](
         tinyso::Individual const &ind, uint32_t const) -> double
       {
         uint32_t cid = cidStart;
@@ -193,11 +196,23 @@ int32_t main(int32_t argc, char **argv) {
           gaParam.ReadyToStart(1);
           od4.send(gaParam);
 
+          // Setup start time
+          StartTime = std::chrono::high_resolution_clock::now();
+
+          bool hasOverTimeLimit = false;
           while (cur_flagStruct.task_completed == 0 && od4.isRunning()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+            // Check end time
+            EndTime = std::chrono::high_resolution_clock::now();
+            const std::chrono::duration<double> elapsed = EndTime - StartTime;
+            if ( elapsed.count() >= 100.0f ){
+              hasOverTimeLimit = true;
+              break;
+            }
           }
 
-          if (!od4.isRunning() || cur_flagStruct.task_completed == 1) {
+          if (!od4.isRunning() || cur_flagStruct.task_completed == 1 || hasOverTimeLimit) {
             terminate = true;
 
             opendlv::logic::sensation::GAParam gaParam;
@@ -205,6 +220,29 @@ int32_t main(int32_t argc, char **argv) {
             od4.send(gaParam);
           }
 
+          // Elapsed
+          eta += cur_flagStruct.task_elapsed;
+          eta += cur_flagStruct.avg_obsstatic_elapsed;
+          eta += cur_flagStruct.avg_obsdynamic_elapsed;
+          eta += cur_flagStruct.avg_lookaround_elapsed;
+          eta += 0.5*cur_flagStruct.avg_targetfinding_elapsed;
+          eta += 0.5*cur_flagStruct.avg_frontreaching_elapsed;
+
+          // Count
+          eta += cur_flagStruct.obsstatic_timer;
+          eta += cur_flagStruct.obsdynamic_timer;
+          eta += cur_flagStruct.lookaround_timer;
+          eta += 0.5*cur_flagStruct.targetfinding_timer;
+          eta += 0.5*cur_flagStruct.frontreaching_timer;
+          eta += cur_flagStruct.closeball_timer;
+          eta += cur_flagStruct.closestaticobs_timer;
+
+          // Percentage
+          eta += ( cur_flagStruct.avg_obsstatic_elapsed * cur_flagStruct.obsstatic_timer 
+                 + cur_flagStruct.avg_obsdynamic_elapsed * cur_flagStruct.obsdynamic_timer
+                 + cur_flagStruct.avg_lookaround_elapsed * cur_flagStruct.lookaround_timer ) 
+                 / cur_flagStruct.task_elapsed;   
+                 
           std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
           cidLocks[cid].unlock();
