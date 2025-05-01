@@ -470,14 +470,131 @@
 
          if ( ReadyToStart == false ){
             // Terminate the loop
+            std::cout <<" Time to terminate the flying..." << std::endl;
             if ( hasTakeoff ){
                 Landing(od4, 0.0f, 3);
                 Stopping(od4);
                 hasTakeoff = false;
+
+                // Record the end time
+                taskEndTime = std::chrono::high_resolution_clock::now();
+                const std::chrono::duration<double> elapsed = taskEndTime - taskStartTime;
+
+                auto start_time_t = std::chrono::system_clock::to_time_t(
+                    std::chrono::time_point_cast<std::chrono::system_clock::duration>(taskStartTime)
+                );
+                auto end_time_t = std::chrono::system_clock::to_time_t(
+                    std::chrono::time_point_cast<std::chrono::system_clock::duration>(taskEndTime)
+                );
+
+                std::cout <<" Task complete with start time: " << std::ctime(&start_time_t) << std::endl;
+                std::cout <<" , end time: " << std::ctime(&end_time_t) << std::endl;
+                std::cout <<" , task elapsed: " << elapsed.count() << " seconds(s)" << std::endl;
+                std::cout <<" , average obs static dodging elapsed: " << ObsStaticElapsed / nObsStaticCount << " seconds(s)" << std::endl;
+                std::cout <<" , so far has dodged obs static for " << nObsStaticCount << " times" << std::endl;
+                std::cout <<" , average obs dynamic dodging elapsed: " << ObsDynamicElapsed / nObsDynamicCount << " seconds(s)" << std::endl;
+                std::cout <<" , so far has dodged obs dynamic for " << nObsDynamicCount << " times" << std::endl;
+                std::cout <<" , average target finding elapsed: " << TargetFindingElapsed / nTargetFindingCount << " seconds(s)" << std::endl;
+                std::cout <<" , so far has done target finding for " << nTargetFindingCount << " times" << std::endl;
+                std::cout <<" , average front reaching elapsed: " << FrontReachingElapsed / nfrontReachingCount << " seconds(s)" << std::endl;
+                std::cout <<" , so far has done front reaching for " << nfrontReachingCount << " times" << std::endl;
+                std::cout <<" , average look around elapsed: " << LookAroundElapsed / nlookAroundCount << " seconds(s)" << std::endl;
+                std::cout <<" , so far has done look around for " << nlookAroundCount << " times" << std::endl;
+                std::cout <<" , average close to ball elapsed: " << closeBallTimer / closeBallCount << " seconds(s)" << std::endl;
+                std::cout <<" , so far has closed to ball for " << closeBallCount << " times" << std::endl;
+                std::cout <<" , average close to static obs elapsed: " << closeStaticObsTimer / closeStaticObsCount << " seconds(s)" << std::endl;
+                std::cout <<" , so far has closed to static obs for " << closeStaticObsCount << " times" << std::endl;
+                std::cout <<" , so far has escaped from stucks for " << nStuckEscapeCount << " times" << std::endl;
+                
+                opendlv::logic::sensation::CompleteFlag cFlag;
+                cFlag.task_completed(1);
+                cFlag.task_elapsed(elapsed.count());
+                cFlag.avg_obsstatic_elapsed(ObsStaticElapsed / nObsStaticCount);
+                cFlag.obsstatic_timer(nObsStaticCount);
+                cFlag.avg_obsdynamic_elapsed(ObsDynamicElapsed / nObsDynamicCount);
+                cFlag.obsdynamic_timer(nObsDynamicCount);
+                cFlag.avg_targetfinding_elapsed(TargetFindingElapsed / nTargetFindingCount);
+                cFlag.targetfinding_timer(nTargetFindingCount);
+                cFlag.avg_frontreaching_elapsed(FrontReachingElapsed / nfrontReachingCount);
+                cFlag.frontreaching_timer(nfrontReachingCount);
+                cFlag.avg_lookaround_elapsed(LookAroundElapsed / nlookAroundCount);
+                cFlag.lookaround_timer(nlookAroundCount);
+                cFlag.avg_closeball_elapsed(closeBallTimer / closeBallCount);
+                cFlag.closeball_timer(closeBallCount);
+                cFlag.avg_closestaticobs_elapsed(closeStaticObsTimer / closeStaticObsCount);
+                cFlag.closestaticobs_timer(closeStaticObsCount);
+                cFlag.stuck_timer(nStuckEscapeCount);
+                od4->send(cFlag);
+                
+                // Reset all variables
+                distPathstate_vec.clear();
+                cur_validWay = {-1.0f, -1.0f, -1.0f};
+                on_GoTO_MODE = false;
+                on_TURNING_MODE = false;
+                preFront_togo = -1.0f;
+                nFrontReachingTimer = 0;
+                nStuckEscapeCount = 0;
+                pre_front = -1.0f;
+                front_dev = -1.0f;
+            
+                // Variables for static obstacles avoidance
+                cur_distToMove = 0.0f;
+                time_toMove = 1;
+                cur_preDist = {-1.0f, -1.0f};
+                cur_reachEndState = { false, false, false, false };
+                staticDodgeLeft = false;
+                staticDodgeRight = false;
+                isCloseToStaticObs = false;
+            
+                // Variables for dynamic obstacles avoidance
+                dodgeDist = 0.0f;
+                dodgeDist_UP = 0.0f;
+                has_dodgeToRear = false;
+                cur_dodgeType = DODGE_NONE;
+                cur_obsState = { -1.0f, -1.0f };
+                has_possibleInterrupt = false;
+                has_possibleInterrupt_dynamic = false;
+                has_InterruptNeedToReDo = false;
+                has_InterruptNeedToReDo_dynamic = false;
+                has_InterruptNeedToReDo_stuck = false;
+            
+                // Variables for front reaching
+                cur_pathReachingState = {false, false, -1.0f};
+            
+                // Variables for target finding
+                cur_targetCheckState = {false, false, false, -1.0f, 100.0f / 180.0f * M_PI, -1.0f, -1.0f, -1.0f};
+                start_turning_angle = 0.0f;
+            
+                // Variables for looking around
+                angleFrontState_vec.clear();
+                cur_lookAroundState = {false, false, false, -1.0f, -10.0f, -1.0f, 0, -1.0f, 10.0f, -1.0f, 10.0f, 0};
+                cur_sortType = SORT_BIGTOSMALL;
+                ori_front = 0.0f;
+            
+                // Timer to record time of each behaviour
+                taskStartTime = std::chrono::high_resolution_clock::now();
+                taskEndTime = std::chrono::high_resolution_clock::now();
+                nObsStaticCount = 0;
+                ObsStaticElapsed = 0.0f;
+                obsStaticStartTime = std::chrono::high_resolution_clock::now();
+                obsStaticEndTime = std::chrono::high_resolution_clock::now();
+                nObsDynamicCount = 0;
+                ObsDynamicElapsed = 0.0f;
+                obsDynamicStartTime = std::chrono::high_resolution_clock::now();
+                obsDynamicEndTime = std::chrono::high_resolution_clock::now();
+                nTargetFindingCount = 0;
+                TargetFindingElapsed = 0.0f;
+                targetFindingStartTime = std::chrono::high_resolution_clock::now();
+                targetFindingEndTime = std::chrono::high_resolution_clock::now();  
+                nfrontReachingCount = 0;
+                FrontReachingElapsed = 0.0f;
+                frontReachingStartTime = std::chrono::high_resolution_clock::now();
+                frontReachingEndTime = std::chrono::high_resolution_clock::now();
+                nlookAroundCount = 0;
+                LookAroundElapsed = 0.0f;
+                lookAroundStartTime = std::chrono::high_resolution_clock::now();
+                lookAroundEndTime = std::chrono::high_resolution_clock::now(); 
             }
-            opendlv::logic::sensation::CompleteFlag cFlag;
-            cFlag.task_completed(0);
-            od4.send(cFlag);
             continue;
          }
  
@@ -488,7 +605,12 @@
          */
          if ( hasTakeoff == false ){
              if ( cur_state_battery_state > takeoff_batterythreshold ){
+                 std::cout <<" Start taking off..." << std::endl;
+                 opendlv::logic::sensation::CompleteFlag cFlag;
+                 cFlag.task_completed(0);
+                 od4->send(cFlag);
                  Takeoff(od4, 1.5f, 3);
+                 std::this_thread::sleep_for(std::chrono::milliseconds(3000));
                  hasTakeoff = true;
                  taskStartTime = std::chrono::high_resolution_clock::now();
              }
@@ -566,7 +688,76 @@
                     cFlag.avg_closestaticobs_elapsed(closeStaticObsTimer / closeStaticObsCount);
                     cFlag.closestaticobs_timer(closeStaticObsCount);
                     cFlag.stuck_timer(nStuckEscapeCount);
-                    od4.send(cFlag);
+                    od4->send(cFlag);
+                
+                    // Reset all variables
+                    distPathstate_vec.clear();
+                    cur_validWay = {-1.0f, -1.0f, -1.0f};
+                    on_GoTO_MODE = false;
+                    on_TURNING_MODE = false;
+                    preFront_togo = -1.0f;
+                    nFrontReachingTimer = 0;
+                    nStuckEscapeCount = 0;
+                    pre_front = -1.0f;
+                    front_dev = -1.0f;
+                
+                    // Variables for static obstacles avoidance
+                    cur_distToMove = 0.0f;
+                    time_toMove = 1;
+                    cur_preDist = {-1.0f, -1.0f};
+                    cur_reachEndState = { false, false, false, false };
+                    staticDodgeLeft = false;
+                    staticDodgeRight = false;
+                    isCloseToStaticObs = false;
+                
+                    // Variables for dynamic obstacles avoidance
+                    dodgeDist = 0.0f;
+                    dodgeDist_UP = 0.0f;
+                    has_dodgeToRear = false;
+                    cur_dodgeType = DODGE_NONE;
+                    cur_obsState = { -1.0f, -1.0f };
+                    has_possibleInterrupt = false;
+                    has_possibleInterrupt_dynamic = false;
+                    has_InterruptNeedToReDo = false;
+                    has_InterruptNeedToReDo_dynamic = false;
+                    has_InterruptNeedToReDo_stuck = false;
+                
+                    // Variables for front reaching
+                    cur_pathReachingState = {false, false, -1.0f};
+                
+                    // Variables for target finding
+                    cur_targetCheckState = {false, false, false, -1.0f, 100.0f / 180.0f * M_PI, -1.0f, -1.0f, -1.0f};
+                    start_turning_angle = 0.0f;
+                
+                    // Variables for looking around
+                    angleFrontState_vec.clear();
+                    cur_lookAroundState = {false, false, false, -1.0f, -10.0f, -1.0f, 0, -1.0f, 10.0f, -1.0f, 10.0f, 0};
+                    cur_sortType = SORT_BIGTOSMALL;
+                    ori_front = 0.0f;
+                
+                    // Timer to record time of each behaviour
+                    taskStartTime = std::chrono::high_resolution_clock::now();
+                    taskEndTime = std::chrono::high_resolution_clock::now();
+                    nObsStaticCount = 0;
+                    ObsStaticElapsed = 0.0f;
+                    obsStaticStartTime = std::chrono::high_resolution_clock::now();
+                    obsStaticEndTime = std::chrono::high_resolution_clock::now();
+                    nObsDynamicCount = 0;
+                    ObsDynamicElapsed = 0.0f;
+                    obsDynamicStartTime = std::chrono::high_resolution_clock::now();
+                    obsDynamicEndTime = std::chrono::high_resolution_clock::now();
+                    nTargetFindingCount = 0;
+                    TargetFindingElapsed = 0.0f;
+                    targetFindingStartTime = std::chrono::high_resolution_clock::now();
+                    targetFindingEndTime = std::chrono::high_resolution_clock::now();  
+                    nfrontReachingCount = 0;
+                    FrontReachingElapsed = 0.0f;
+                    frontReachingStartTime = std::chrono::high_resolution_clock::now();
+                    frontReachingEndTime = std::chrono::high_resolution_clock::now();
+                    nlookAroundCount = 0;
+                    LookAroundElapsed = 0.0f;
+                    lookAroundStartTime = std::chrono::high_resolution_clock::now();
+                    lookAroundEndTime = std::chrono::high_resolution_clock::now(); 
                     break;
                 }
              }
@@ -697,29 +888,29 @@
          }
 
          /*
-             Stucks Escape for 10 secs
+             Stucks Escape for 5 secs
          */
-        //  if ( pre_front == -1.0f ){
-        //     pre_front = front;
-        //     nFrontReachingTimer += 1;
-        //  }
-        //  else if ( nFrontReachingTimer <= 1000){
-        //     float dev = std::abs( pre_front - front );
-        //     if ( dev > front_dev ){
-        //         front_dev = dev;
-        //     }
-        //     nFrontReachingTimer += 1;
-        //  }
-        //  else{
-        //     if ( front_dev <= 0.1f ){
-        //         has_InterruptNeedToReDo_stuck = true;
-        //         std::cout << "Stucks at some positions, try to escape by redo..." << std::endl;
-        //         nStuckEscapeCount += 1;
-        //     }
-        //     nFrontReachingTimer = 0;
-        //     pre_front = -1.0f;
-        //     front_dev = -1.0f;
-        //  }
+         if ( pre_front == -1.0f ){
+            pre_front = front;
+            nFrontReachingTimer += 1;
+         }
+         else if ( nFrontReachingTimer <= 500){
+            float dev = std::abs( pre_front - front );
+            if ( dev > front_dev ){
+                front_dev = dev;
+            }
+            nFrontReachingTimer += 1;
+         }
+         else{
+            if ( front_dev <= 0.1f ){
+                has_InterruptNeedToReDo_stuck = true;
+                std::cout << "Stucks at some positions, try to escape by redo..." << std::endl;
+                nStuckEscapeCount += 1;
+            }
+            nFrontReachingTimer = 0;
+            pre_front = -1.0f;
+            front_dev = -1.0f;
+         }
 
  
          /*
@@ -1316,14 +1507,14 @@
  
                  if ( aimDirection_to_reach > 0.0f ){    
                      float angTurn = angTurn_targetFinding / 180.0f * M_PI;
-                     int16_t time_toTurn = std::static_cast<int>(std::round( ( angTurn + 10.0f / 180.0f * M_PI ) * time_ToTurn_ratio ));
+                     int16_t time_toTurn = static_cast<int>(std::round( ( angTurn + 10.0f / 180.0f * M_PI ) * time_ToTurn_ratio ));
                      cur_targetCheckState.ang_toTurn = angTurn;
                      cur_targetCheckState.startAngle = cur_state_yaw;    
                      Goto(od4, 0.0f, 0.0f, 0.0f, angTurn + 10.0f / 180.0f * M_PI, time_toTurn); 
                  }
                  else{
                      float angTurn = -angTurn_targetFinding / 180.0f * M_PI;
-                     int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn - 10.0f / 180.0f * M_PI ) * time_ToTurn_ratio ));
+                     int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn - 10.0f / 180.0f * M_PI ) * time_ToTurn_ratio ));
                      cur_targetCheckState.ang_toTurn = angTurn;
                      cur_targetCheckState.startAngle = cur_state_yaw;    
                      Goto(od4, 0.0f, 0.0f, 0.0f, angTurn - 10.0f / 180.0f * M_PI, time_toTurn);
@@ -1370,14 +1561,14 @@
                          float angDev = std::abs( angleDifference( cur_targetCheckState.startAngle, cur_state_yaw ) );
                          if ( cur_targetCheckState.ang_toTurn > 0.0f ){
                              float angTurn = angTurn_targetFinding / 180.0f * M_PI - angDev;
-                             int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn + 10.0f / 180.0f * M_PI ) * time_ToTurn_ratio ));
+                             int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn + 10.0f / 180.0f * M_PI ) * time_ToTurn_ratio ));
                              cur_targetCheckState.ang_toTurn = angTurn;
                              cur_targetCheckState.startAngle = cur_state_yaw;    
                              Goto(od4, 0.0f, 0.0f, 0.0f, angTurn + 10.0f / 180.0f * M_PI, time_toTurn);                             
                          }
                          else{
                              float angTurn = - ( angTurn_targetFinding / 180.0f * M_PI - angDev );
-                             int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn - 10.0f / 180.0f * M_PI ) * time_ToTurn_ratio ));
+                             int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn - 10.0f / 180.0f * M_PI ) * time_ToTurn_ratio ));
                              cur_targetCheckState.ang_toTurn = angTurn;
                              cur_targetCheckState.startAngle = cur_state_yaw;    
                              Goto(od4, 0.0f, 0.0f, 0.0f, angTurn - 10.0f / 180.0f * M_PI, time_toTurn);          
@@ -1470,7 +1661,7 @@
                             if ( angleDifference( cur_state_yaw, pair_cand.angle ) < 0.0f ){
                                 angTurn -= 10.0f / 180.0f * M_PI;
                             }
-                            int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                            int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
                             Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                             cur_targetCheckState.turnStarted = true;
                             break;
@@ -1522,7 +1713,7 @@
                          if ( angleDifference( yaw, cur_targetCheckState.targetAngle ) < 0.0f ){
                              angTurn -= 10.0f / 180.0f * M_PI;
                          }
-                         int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                         int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
                          Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn); 
                          on_TURNING_MODE = true;
                          continue;
@@ -1588,7 +1779,7 @@
                                  if ( angleDifference( yaw, pair_cand.angle ) < 0.0f ){
                                      angTurn -= 10.0f / 180.0f * M_PI;
                                  }
-                                 int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                                 int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
                                  Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                                  break;
                              }
@@ -1865,17 +2056,17 @@
                  cur_lookAroundState.preAngle = cur_state_yaw + M_PI;
              }
              cur_lookAroundState.startAngle = cur_state_yaw;
-             int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn_lookAround / 180.0f * M_PI ) * time_ToTurn_ratio ));
+             int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn_lookAround / 180.0f * M_PI ) * time_ToTurn_ratio ));
              Goto(od4, 0.0f, 0.0f, 0.0f, angTurn_lookAround / 180.0f * M_PI, time_toTurn);
              cur_lookAroundState.clearPathCheckStarted = true;
              on_TURNING_MODE = true;
          }
          else if ( cur_lookAroundState.turnStarted == false ){
-             if ( std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state_yaw ) ) < 110.0f / 180.0f * M_PI ){
+             if ( std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state_yaw ) ) < angTurn_lookAround / 180.0f * M_PI * 0.92f ){
                  if ( has_possibleInterrupt || has_possibleInterrupt_dynamic ){
                      std::cout <<" Some targets occur, so try to look up again..." << std::endl;
                      float angTurn = angTurn_lookAround / 180.0f * M_PI - std::abs( angleDifference( cur_lookAroundState.startAngle, cur_state_yaw ) );
-                     int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                     int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
                      Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                      on_TURNING_MODE = true;
 
@@ -2032,7 +2223,7 @@
                          if ( angleDifference( cur_state_yaw, pair_cand.angle ) < 0.0f ){
                              angTurn -= 10.0f / 180.0f * M_PI;
                          }
-                         int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                         int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
                          Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                          std::cout <<" Found a path to go to and start turning to target angle with target: " << pair_cand.angle << std::endl;
                          cur_lookAroundState.turnStarted = true;
@@ -2054,7 +2245,7 @@
                      if ( angleDifference( cur_state_yaw, cur_lookAroundState.preAngle ) < 0.0f ){
                          angTurn -= 10.0f / 180.0f * M_PI;
                      }
-                     int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                     int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
                      Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                      std::cout <<" No path to go to so start turning to the previous target angle with target: " << cur_lookAroundState.preAngle << std::endl;
                      cur_lookAroundState.turnStarted = true;
@@ -2069,7 +2260,7 @@
                      if ( angleDifference( cur_state_yaw, cur_lookAroundState.targetAngle ) < 0.0f ){
                          angTurn -= 10.0f / 180.0f * M_PI;
                      }
-                     int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                     int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
                      Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                      on_TURNING_MODE = true;
 
@@ -2221,7 +2412,7 @@
                              if ( angleDifference( cur_state_yaw, pair_cand.angle ) < 0.0f ){
                                  angTurn -= 10.0f / 180.0f * M_PI;
                              }
-                             int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                             int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
                              Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                              std::cout <<" Found a path to go to and start turning to target angle with target: " << pair_cand.angle << std::endl;
                              break;
@@ -2245,7 +2436,7 @@
                      if ( angleDifference( cur_state_yaw, cur_lookAroundState.preAngle ) < 0.0f ){
                          angTurn -= 10.0f / 180.0f * M_PI;
                      }
-                     int16_t time_toTurn = std::static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
+                     int16_t time_toTurn = static_cast<int>(std::round( std::abs( angTurn ) * time_ToTurn_ratio ));
                      Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
                      std::cout <<" No path to go to so start turning to the previous target angle with target: " << cur_lookAroundState.preAngle << std::endl;
                      continue;                        

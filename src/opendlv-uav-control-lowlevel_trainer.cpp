@@ -33,36 +33,6 @@
 #include "opendlv-standard-message-set.hpp"
 #include "tinyso.hpp"
 
-tme290::grass::Control step(tme290::grass::Sensors sensors,
-    tinyso::Individual const &ind) {
-
-  // Note that the number of variables per individual can be changed.
-  // Also note that they can be cast to integers, or whatever
-  // data is needed, e.g. int32_t x = static_cast<int32_t>(v0).
-
-  double v0 = ind[0] * (sensors.i() + 1);
-  // double v1 = ind[1];
-  // double v2 = ind[2];
-  // double v3 = ind[3];
-  // double v4 = ind[4];
-  // double v5 = ind[5];
-
-  tme290::grass::Control control;
-  if (v0 < 0.25) {
-    control.command(1);
-  } else if (v0 < 0.5) {
-    control.command(2);
-  } else if (v0 < 0.75) {
-    control.command(3);
-  } else if (v0 < 1.0) {
-    control.command(4);
-  } else {
-    control.command(0);
-  }
-  
-  return control;
-}
-
 int32_t main(int32_t argc, char **argv) {
   int32_t retCode{0};
   auto commandlineArguments = cluon::getCommandlineArguments(argc, argv);
@@ -75,9 +45,14 @@ int32_t main(int32_t argc, char **argv) {
       << " [--verbose]" << std::endl;
     std::cerr << "Example: " << argv[0] << " --j=2 --verbose" << std::endl;
     retCode = 1;
-  } else {
+  } 
+  else if ( 0 == commandlineArguments.count("maxtime") ){
+    std::cerr << "Please include the max time" << std::endl;
+  }
+  else {
     bool const verbose = (commandlineArguments.count("verbose") != 0);
     uint16_t const jobs = std::stoi(commandlineArguments["j"]);
+    uint16_t const maxTime = std::stoi(commandlineArguments["maxtime"]);
     uint32_t const cidStart = (commandlineArguments.count("cid-start") != 0) 
       ? std::stoi(commandlineArguments["cid-start"]) : 111;
 
@@ -109,7 +84,7 @@ int32_t main(int32_t argc, char **argv) {
           std::make_tuple());
     }
 
-    auto evaluate{[&cidStart, &jobs, &cidLocks, &terminate, &StartTime, &EndTime](
+    auto evaluate{[&cidStart, &jobs, &cidLocks, &terminate, &StartTime, &EndTime, &maxTime](
         tinyso::Individual const &ind, uint32_t const) -> double
       {
         uint32_t cid = cidStart;
@@ -180,69 +155,168 @@ int32_t main(int32_t argc, char **argv) {
 
           od4.dataTrigger(opendlv::logic::sensation::CompleteFlag::ID(), onFlagRead);
 
+          struct cfPos {
+              float x;
+              float y;
+          };
+          std::mutex frameMutex;
+          cfPos cur_pos{-4.0f, -4.0f};
+          auto onFrame{[&cur_pos, &frameMutex](cluon::data::Envelope &&envelope)
+          {
+              uint32_t const senderStamp = envelope.senderStamp();
+              auto frame = cluon::extractMessage<opendlv::sim::Frame>(std::move(envelope));
+              std::lock_guard<std::mutex> lck(frameMutex);
+              switch (senderStamp) {
+                  case 0: 
+                      cur_pos.x = frame.x();
+                      cur_pos.y = frame.y();
+                      break;
+              }
+          }};
+          od4.dataTrigger(opendlv::sim::Frame::ID(), onFrame);
+
+          std::mutex stateMutex;
+          std::atomic<float> cur_state_yaw{0.0f};
+          auto onStateRead = [&cur_state_yaw](cluon::data::Envelope &&env){
+              auto senderStamp = env.senderStamp();
+              // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
+              opendlv::logic::sensation::CrazyFlieState cfState = cluon::extractMessage<opendlv::logic::sensation::CrazyFlieState>(std::move(env));
+              // Store distance readings.
+              //  std::lock_guard<std::mutex> lck(stateMutex);
+              cur_state_yaw = cfState.cur_yaw(); 
+          };
+          // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
+          od4.dataTrigger(opendlv::logic::sensation::CrazyFlieState::ID(), onStateRead);
+
           // Give the param individuals
           opendlv::logic::sensation::GAParam gaParam;
-          gaParam.safeDist_ratio = ind[0];
-          gaParam.dodge_dist_totune = ind[1];
-          gaParam.cur_distToMove_ratio = ind[2];
-          gaParam.time_ToMove_ratio = ind[3];
-          gaParam.cur_distToMove_goto_ratio = ind[4];
-          gaParam.time_ToMove_goto_ratio = ind[5];
-          gaParam.cur_distToMove_target_ratio = ind[6];
-          gaParam.time_ToMove_target_ratio = ind[7];
-          gaParam.angTurn_targetFinding = ind[8];
-          gaParam.time_ToTurn_ratio = ind[9];
-          gaParam.angTurn_lookAround = ind[10];
+          gaParam.safeDist_ratio(ind[0]);
+          gaParam.dodge_dist_totune(ind[1]);
+          gaParam.cur_distToMove_ratio(ind[2]);
+          gaParam.time_ToMove_ratio(ind[3]);
+          gaParam.cur_distToMove_goto_ratio(ind[4]);
+          gaParam.time_ToMove_goto_ratio(ind[5]);
+          gaParam.cur_distToMove_target_ratio(ind[6]);
+          gaParam.time_ToMove_target_ratio(ind[7]);
+          gaParam.angTurn_targetFinding(ind[8]);
+          gaParam.time_ToTurn_ratio(ind[9]);
+          gaParam.angTurn_lookAround(ind[10]);
           gaParam.ReadyToStart(1);
           od4.send(gaParam);
 
           // Setup start time
+          while(cur_flagStruct.task_completed == 1){
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+          } // Wait until task set
           StartTime = std::chrono::high_resolution_clock::now();
+          std::cout << "Start the " << jobs << " thread training..." << std::endl;
 
           bool hasOverTimeLimit = false;
+          bool hasOverRange = false;
+          bool hasStuck = false;
+          cfPos pre_pos = {-4.0f, -4.0f};
+          int nCount = 0;
+          float dist_stuck = -1.0f;
           while (cur_flagStruct.task_completed == 0 && od4.isRunning()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
             // Check end time
             EndTime = std::chrono::high_resolution_clock::now();
             const std::chrono::duration<double> elapsed = EndTime - StartTime;
-            if ( elapsed.count() >= 100.0f ){
+            if ( elapsed.count() >= maxTime ){
               hasOverTimeLimit = true;
+              std::cout << "The training over time limit..." << std::endl;
               break;
             }
+
+            if ( cur_pos.x != -4.0f && cur_pos.y != -4.0f ){
+              pre_pos = cur_pos;
+              if ( cur_pos.x < -1.0f || cur_pos.x > 1.5f || cur_pos.y < -1.5f || cur_pos.y > 0.5f ){
+                hasOverRange = true;
+                std::cout << "The training over the room range..." << std::endl;
+                break;
+              }
+            }
+
+            if ( cur_flagStruct.stuck_timer >= 1 ){
+              hasStuck = true;
+              std::cout << "The training stucks at some points..." << std::endl;
+              break;
+            }
+
+            if ( cur_pos.x != -4.0f && cur_pos.y != -4.0f ){
+              if ( nCount < 1500 ){
+                nCount += 1;
+              }
+              else{
+                float dist = std::sqrt(std::pow(cur_pos.x-pre_pos.x,2) + std::pow(cur_pos.y-pre_pos.y,2));
+                if ( dist <= 0.01f ){
+                  hasStuck = true;
+                  std::cout << "The training stucks at some points..." << std::endl;
+                  break;
+                }
+                pre_pos = cur_pos;
+                nCount = 0;
+              }
+            }            
           }
 
-          if (!od4.isRunning() || cur_flagStruct.task_completed == 1 || hasOverTimeLimit) {
+          if (!od4.isRunning() || cur_flagStruct.task_completed == 1 || hasOverTimeLimit || hasOverRange || hasStuck ) {
             terminate = true;
+            std::cout << "The " << jobs << " thread training should stop now" << std::endl;
 
+            // Reset param
             opendlv::logic::sensation::GAParam gaParam;
             gaParam.ReadyToStart(0);
             od4.send(gaParam);
+
+            while(cur_flagStruct.task_completed == 0){
+              std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            } // Wait until task completed
+
+            // Reset position
+            opendlv::logic::action::CrazyFlieCommand cfcommand;
+            cluon::data::TimeStamp sampleTime;
+            od4.send(cfcommand, sampleTime, 4);
+
+            float dist = std::sqrt(std::pow(cur_pos.x,2) + std::pow(cur_pos.y,2));
+            while( dist > 0.01f || std::abs( cur_state_yaw ) >= 1.0f / 180.0f * M_PI ){
+              std::this_thread::sleep_for(std::chrono::milliseconds(10));
+              dist = std::sqrt(std::pow(cur_pos.x,2) + std::pow(cur_pos.y,2));
+              // std::cout << "The distance is: " << dist << ",x: " << cur_pos.x << ",y: " << cur_pos.y << std::endl;
+            } // Wait until the current position back to (0,0)
+            std::cout << "The " << jobs << " thread training complete reset..." << std::endl;
           }
 
-          // Elapsed
-          eta += cur_flagStruct.task_elapsed;
-          eta += cur_flagStruct.avg_obsstatic_elapsed;
-          eta += cur_flagStruct.avg_obsdynamic_elapsed;
-          eta += cur_flagStruct.avg_lookaround_elapsed;
-          eta += 0.5*cur_flagStruct.avg_targetfinding_elapsed;
-          eta += 0.5*cur_flagStruct.avg_frontreaching_elapsed;
+          if ( hasOverTimeLimit || hasOverRange || hasStuck ){
+            eta = 300;
+          }
+          else{
+            // Elapsed
+            eta += std::isnan(cur_flagStruct.task_elapsed) ? 0.0 : cur_flagStruct.task_elapsed;
+            eta += std::isnan(cur_flagStruct.avg_obsstatic_elapsed) ? 0.0 : cur_flagStruct.avg_obsstatic_elapsed;
+            eta += std::isnan(cur_flagStruct.avg_obsdynamic_elapsed) ? 0.0 : cur_flagStruct.avg_obsdynamic_elapsed;
+            eta += std::isnan(cur_flagStruct.avg_lookaround_elapsed) ? 0.0 : cur_flagStruct.avg_lookaround_elapsed;
+            eta += std::isnan(cur_flagStruct.avg_targetfinding_elapsed) ? 0.0 : 0.5 * cur_flagStruct.avg_targetfinding_elapsed;
+            eta += std::isnan(cur_flagStruct.avg_frontreaching_elapsed) ? 0.0 : 0.5 * cur_flagStruct.avg_frontreaching_elapsed;
 
-          // Count
-          eta += cur_flagStruct.obsstatic_timer;
-          eta += cur_flagStruct.obsdynamic_timer;
-          eta += cur_flagStruct.lookaround_timer;
-          eta += 0.5*cur_flagStruct.targetfinding_timer;
-          eta += 0.5*cur_flagStruct.frontreaching_timer;
-          eta += cur_flagStruct.closeball_timer;
-          eta += cur_flagStruct.closestaticobs_timer;
+            // Count
+            eta += cur_flagStruct.obsstatic_timer;
+            eta += cur_flagStruct.obsdynamic_timer;
+            eta += cur_flagStruct.lookaround_timer;
+            eta += 0.5*cur_flagStruct.targetfinding_timer;
+            eta += 0.5*cur_flagStruct.frontreaching_timer;
+            eta += cur_flagStruct.closeball_timer;
+            eta += cur_flagStruct.closestaticobs_timer;
 
-          // Percentage
-          eta += ( cur_flagStruct.avg_obsstatic_elapsed * cur_flagStruct.obsstatic_timer 
-                 + cur_flagStruct.avg_obsdynamic_elapsed * cur_flagStruct.obsdynamic_timer
-                 + cur_flagStruct.avg_lookaround_elapsed * cur_flagStruct.lookaround_timer ) 
-                 / cur_flagStruct.task_elapsed;   
-                 
+            // Percentage
+            eta += ( std::isnan(cur_flagStruct.avg_obsstatic_elapsed) ? 0.0 : cur_flagStruct.avg_obsstatic_elapsed * cur_flagStruct.obsstatic_timer 
+                  + std::isnan(cur_flagStruct.avg_obsdynamic_elapsed) ? 0.0 : cur_flagStruct.avg_obsdynamic_elapsed * cur_flagStruct.obsdynamic_timer
+                  + std::isnan(cur_flagStruct.avg_lookaround_elapsed) ? 0.0 : cur_flagStruct.avg_lookaround_elapsed * cur_flagStruct.lookaround_timer ) 
+                  / cur_flagStruct.task_elapsed;   
+          }
+          
+          std::cout << "The " << jobs << " thread training complete fitness computing: " << 1.0 / eta << std::endl;
           std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
           cidLocks[cid].unlock();
