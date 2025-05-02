@@ -158,9 +158,10 @@ int32_t main(int32_t argc, char **argv) {
           struct cfPos {
               float x;
               float y;
+              float z;
           };
           std::mutex frameMutex;
-          cfPos cur_pos{-4.0f, -4.0f};
+          cfPos cur_pos{-4.0f, -4.0f, 0.0f};
           auto onFrame{[&cur_pos, &frameMutex](cluon::data::Envelope &&envelope)
           {
               uint32_t const senderStamp = envelope.senderStamp();
@@ -170,6 +171,7 @@ int32_t main(int32_t argc, char **argv) {
                   case 0: 
                       cur_pos.x = frame.x();
                       cur_pos.y = frame.y();
+                      cur_pos.z = frame.z();
                       break;
               }
           }};
@@ -234,7 +236,9 @@ int32_t main(int32_t argc, char **argv) {
             }
 
             if ( cur_pos.x != -4.0f && cur_pos.y != -4.0f ){
-              pre_pos = cur_pos;
+              float dist = std::sqrt(std::pow(cur_pos.x,2) + std::pow(cur_pos.y,2));
+              if ( pre_pos.x == -4.0f && pre_pos.y == -4.0f && dist >= 0.2f )
+                pre_pos = cur_pos;
               if ( cur_pos.x < -1.0f || cur_pos.x > 1.5f || cur_pos.y < -1.5f || cur_pos.y > 0.5f ){
                 hasOverRange = true;
                 std::cout << "The training over the room range..." << std::endl;
@@ -248,15 +252,15 @@ int32_t main(int32_t argc, char **argv) {
               break;
             }
 
-            if ( cur_pos.x != -4.0f && cur_pos.y != -4.0f ){
-              if ( nCount < 2000 ){
+            if ( pre_pos.x != -4.0f && pre_pos.y != -4.0f ){
+              if ( nCount < 1000 ){
                 nCount += 1;
               }
               else{
                 float dist = std::sqrt(std::pow(cur_pos.x-pre_pos.x,2) + std::pow(cur_pos.y-pre_pos.y,2));
                 if ( dist <= 0.01f ){
                   hasStuck = true;
-                  std::cout << "The training stucks at some points..." << std::endl;
+                  std::cout << "The training stucks at some points in detail check..." << std::endl;
                   break;
                 }
                 pre_pos = cur_pos;

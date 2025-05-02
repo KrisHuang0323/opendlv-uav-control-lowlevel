@@ -273,11 +273,12 @@
      float angTurn_lookAround = 90.0f / 180.0f * M_PI;
      float timer_lookAround = 2;
      bool ReadyToStart = false;
+     bool isParamRead = false;
      auto onGAParamRead = [&safeDist_ratio, &dodge_dist_totune, &cur_distToMove_ratio,
                             &time_ToMove_ratio, &cur_distToMove_goto_ratio, &time_ToMove_goto_ratio,
                             &cur_distToMove_target_ratio, &time_ToMove_target_ratio, &angTurn_targetFinding,
                             &time_ToTurn_ratio, &angTurn_lookAround, &timer_lookAround,
-                            &ReadyToStart
+                            &ReadyToStart, &isParamRead
                             ](cluon::data::Envelope &&env){
          auto senderStamp = env.senderStamp();
          // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
@@ -285,7 +286,7 @@
          
          // Store aim direction readings.
         //  std::lock_guard<std::mutex> lck(aimDirectionMutex);
-         if ( senderStamp == 0 ){
+         if ( senderStamp == 0 && isParamRead == false ){
             safeDist_ratio = gaParammessage.safeDist_ratio();
             dodge_dist_totune = gaParammessage.dodge_dist_totune();
             cur_distToMove_ratio = gaParammessage.cur_distToMove_ratio();
@@ -309,10 +310,24 @@
                 ReadyToStart = true;
             else
                 ReadyToStart = false;
+            isParamRead = true;
          }
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
      od4->dataTrigger(opendlv::logic::sensation::GAParam::ID(), onGAParamRead);
+
+    std::atomic<float> crazyflie_h{0.0f};
+    auto onFrame{[&crazyflie_h](cluon::data::Envelope &&envelope)
+    {
+        uint32_t const senderStamp = envelope.senderStamp();
+        auto frame = cluon::extractMessage<opendlv::sim::Frame>(std::move(envelope));
+        switch (senderStamp) {
+            case 0: 
+                crazyflie_h = frame.z();
+                break;
+        }
+    }};
+    od4->dataTrigger(opendlv::sim::Frame::ID(), onFrame);
  
      // Takeoff flags
      bool hasTakeoff = false;
@@ -602,6 +617,8 @@
                 LookAroundElapsed = 0.0f;
                 lookAroundStartTime = std::chrono::high_resolution_clock::now();
                 lookAroundEndTime = std::chrono::high_resolution_clock::now(); 
+
+                isParamRead = false;
             }
             continue;
          }
@@ -614,11 +631,14 @@
          if ( hasTakeoff == false ){
              if ( cur_state_battery_state > takeoff_batterythreshold ){
                  std::cout <<" Start taking off..." << std::endl;
+                 Takeoff(od4, 1.5f, 3);
+                 while(crazyflie_h <= 1.5f){
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10)); 
+                 }  // Wait until height reachs
+                 std::this_thread::sleep_for(std::chrono::milliseconds(3000));
                  opendlv::logic::sensation::CompleteFlag cFlag;
                  cFlag.task_completed(0);
                  od4->send(cFlag);
-                 Takeoff(od4, 1.5f, 3);
-                 std::this_thread::sleep_for(std::chrono::milliseconds(3000));
                  hasTakeoff = true;
                  taskStartTime = std::chrono::high_resolution_clock::now();
              }
@@ -766,6 +786,8 @@
                     LookAroundElapsed = 0.0f;
                     lookAroundStartTime = std::chrono::high_resolution_clock::now();
                     lookAroundEndTime = std::chrono::high_resolution_clock::now(); 
+
+                    isParamRead = false;
                     break;
                 }
              }
