@@ -316,14 +316,24 @@
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
      od4->dataTrigger(opendlv::logic::sensation::GAParam::ID(), onGAParamRead);
 
-    std::atomic<float> crazyflie_h{0.0f};
-    auto onFrame{[&crazyflie_h](cluon::data::Envelope &&envelope)
+    struct cfPos {
+        float x;
+        float y;
+        float z;
+    };
+    std::mutex frameMutex;
+    cfPos cur_pos{-4.0f, -4.0f, 0.0f};
+    cfPos pre_pos = {-4.0f, -4.0f, 0.0f};
+    auto onFrame{[&cur_pos, &frameMutex](cluon::data::Envelope &&envelope)
     {
         uint32_t const senderStamp = envelope.senderStamp();
         auto frame = cluon::extractMessage<opendlv::sim::Frame>(std::move(envelope));
+        std::lock_guard<std::mutex> lck(frameMutex);
         switch (senderStamp) {
             case 0: 
-                crazyflie_h = frame.z();
+                cur_pos.x = frame.x();
+                cur_pos.y = frame.y();
+                cur_pos.z = frame.z();
                 break;
         }
     }};
@@ -486,12 +496,58 @@
      double LookAroundElapsed = 0.0f;
      auto lookAroundStartTime = std::chrono::high_resolution_clock::now();
      auto lookAroundEndTime = std::chrono::high_resolution_clock::now(); 
- 
+
+     int nStopCount = 0;
      while (od4->isRunning()) {
          // Sleep for 10 ms to not let the loop run to fast
          std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-         if ( ReadyToStart == false ){
+         bool isTimeToStop = false;
+         int16_t hasStuck = 0;
+         int16_t hasOverLimit = 0;
+         int16_t hasOverTime = 0;
+         if ( hasTakeoff ){
+            const std::chrono::duration<double> elapsed_stop = std::chrono::high_resolution_clock::now() - taskStartTime;
+            if ( elapsed_stop.count() >= 150 ){
+                isTimeToStop = true;
+                hasOverTime = 1;
+                std::cout << "The training over time limit..." << std::endl;
+            }
+                
+            if ( cur_pos.x != -4.0f && cur_pos.y != -4.0f ){
+                float dist = std::sqrt(std::pow(cur_pos.x,2) + std::pow(cur_pos.y,2));
+                if ( pre_pos.x == -4.0f && pre_pos.y == -4.0f && dist >= 0.2f )
+                    pre_pos = cur_pos;
+                if ( cur_pos.x < -1.0f || cur_pos.x > 1.5f || cur_pos.y < -1.5f || cur_pos.y > 0.5f ){
+                    isTimeToStop = true;
+                    hasOverLimit = 1;
+                    std::cout << "The training over the room range..." << std::endl;
+                }
+            }
+            
+            // if ( nStuckEscapeCount >= 1 ){
+            //     isTimeToStop = true;
+            //     std::cout << "The training stucks at some points..." << std::endl;
+            // }
+
+            if ( pre_pos.x != -4.0f && pre_pos.y != -4.0f ){
+                if ( nStopCount < 1000 ){
+                    nStopCount += 1;
+                }
+                else{
+                    float dist = std::sqrt(std::pow(cur_pos.x-pre_pos.x,2) + std::pow(cur_pos.y-pre_pos.y,2));
+                    if ( dist <= 0.01f ){
+                        isTimeToStop = true;
+                        hasStuck = 1;
+                        std::cout << "The training stucks at some points in detail check..." << std::endl;
+                    }
+                    pre_pos = cur_pos;
+                    nStopCount = 0;
+                }
+            }     
+         }
+          
+         if ( isTimeToStop ){
             // Terminate the loop
             // std::cout <<" Time to terminate the flying..." << std::endl;
             if ( hasTakeoff ){
@@ -531,22 +587,34 @@
                 
                 opendlv::logic::sensation::CompleteFlag cFlag;
                 cFlag.task_completed(1);
+                double eta = 1.0;
+                eta += 100;
+                eta += std::isnan(elapsed.count()) ? 0.0 : elapsed.count();
+                eta += std::isnan(ObsStaticElapsed / nObsStaticCount) ? 0.0 : ObsStaticElapsed / nObsStaticCount;
+                eta += std::isnan(ObsDynamicElapsed / nObsDynamicCount) ? 0.0 : ObsDynamicElapsed / nObsDynamicCount;
+                eta += std::isnan(LookAroundElapsed / nlookAroundCount) ? 0.0 : LookAroundElapsed / nlookAroundCount;
+                eta += std::isnan(FrontReachingElapsed / nfrontReachingCount) ? 0.0 : 0.5 * FrontReachingElapsed / nfrontReachingCount;
+                eta += std::isnan(TargetFindingElapsed / nTargetFindingCount) ? 0.0 : 0.5 * TargetFindingElapsed / nTargetFindingCount;
+                
+                eta += nObsStaticCount >= 0.0f ? nObsStaticCount : 10;
+                eta += nObsDynamicCount >= 0.0f ? nObsDynamicCount : 10;
+                eta += nlookAroundCount >= 0.0f ? nlookAroundCount : 30;
+                eta += nTargetFindingCount >= 0.0f ? 0.5*nTargetFindingCount : 15;
+                eta += nTargetFindingCount >= 0.0f ? 0.5*nTargetFindingCount : 15;
+                eta += closeBallCount;
+                eta += closeStaticObsCount;                
+    
+                // Percentage
+                float percentage = ( std::isnan(ObsStaticElapsed / nObsStaticCount) ? 0.0 : ObsStaticElapsed 
+                + std::isnan(ObsDynamicElapsed / nObsDynamicCount) ? 0.0 : ObsDynamicElapsed
+                + std::isnan(LookAroundElapsed / nlookAroundCount) ? 0.0 : LookAroundElapsed ) 
+                / elapsed.count();
+                eta += percentage > 0.0f ? percentage : 1.0f;  
+                cFlag.fitness(1.0 / eta);
                 cFlag.task_elapsed(elapsed.count());
-                cFlag.avg_obsstatic_elapsed(ObsStaticElapsed / nObsStaticCount);
-                cFlag.obsstatic_timer(nObsStaticCount);
-                cFlag.avg_obsdynamic_elapsed(ObsDynamicElapsed / nObsDynamicCount);
-                cFlag.obsdynamic_timer(nObsDynamicCount);
-                cFlag.avg_targetfinding_elapsed(TargetFindingElapsed / nTargetFindingCount);
-                cFlag.targetfinding_timer(nTargetFindingCount);
-                cFlag.avg_frontreaching_elapsed(FrontReachingElapsed / nfrontReachingCount);
-                cFlag.frontreaching_timer(nfrontReachingCount);
-                cFlag.avg_lookaround_elapsed(LookAroundElapsed / nlookAroundCount);
-                cFlag.lookaround_timer(nlookAroundCount);
-                cFlag.avg_closeball_elapsed(closeBallTimer / closeBallCount);
-                cFlag.closeball_timer(closeBallCount);
-                cFlag.avg_closestaticobs_elapsed(closeStaticObsTimer / closeStaticObsCount);
-                cFlag.closestaticobs_timer(closeStaticObsCount);
-                cFlag.stuck_timer(nStuckEscapeCount);
+                cFlag.hasStuck(hasStuck);
+                cFlag.hasOverLimit(hasOverLimit);
+                cFlag.hasOverTime(hasOverTime);
                 od4->send(cFlag);
                 
                 // Reset all variables
@@ -618,9 +686,12 @@
                 lookAroundStartTime = std::chrono::high_resolution_clock::now();
                 lookAroundEndTime = std::chrono::high_resolution_clock::now(); 
 
+                cur_pos = {-4.0f, -4.0f, 0.0f};
+                pre_pos = {-4.0f, -4.0f, 0.0f};
+                nStopCount = 0;
                 isParamRead = false;
+                isTimeToStop = false;
             }
-            continue;
          }
  
          /*
@@ -629,15 +700,17 @@
              - Check if the battery state is acceptable to take off
          */
          if ( hasTakeoff == false ){
-             if ( cur_state_battery_state > takeoff_batterythreshold ){
+             if ( cur_state_battery_state > takeoff_batterythreshold && isParamRead ){
                  std::cout <<" Start taking off..." << std::endl;
                  Takeoff(od4, 1.5f, 3);
-                 while(crazyflie_h <= 1.5f){
+                 while(cur_pos.z <= 1.5f){
                     std::this_thread::sleep_for(std::chrono::milliseconds(10)); 
                  }  // Wait until height reachs
                  std::this_thread::sleep_for(std::chrono::milliseconds(3000));
                  opendlv::logic::sensation::CompleteFlag cFlag;
                  cFlag.task_completed(0);
+                 cFlag.fitness(-1.0);
+                 cFlag.task_elapsed(-1.0f);
                  od4->send(cFlag);
                  hasTakeoff = true;
                  taskStartTime = std::chrono::high_resolution_clock::now();
@@ -700,22 +773,33 @@
                     
                     opendlv::logic::sensation::CompleteFlag cFlag;
                     cFlag.task_completed(1);
+                    double eta = 1.0;
+                    eta += std::isnan(elapsed.count()) ? 0.0 : elapsed.count();
+                    eta += std::isnan(ObsStaticElapsed / nObsStaticCount) ? 0.0 : ObsStaticElapsed / nObsStaticCount;
+                    eta += std::isnan(ObsDynamicElapsed / nObsDynamicCount) ? 0.0 : ObsDynamicElapsed / nObsDynamicCount;
+                    eta += std::isnan(LookAroundElapsed / nlookAroundCount) ? 0.0 : LookAroundElapsed / nlookAroundCount;
+                    eta += std::isnan(FrontReachingElapsed / nfrontReachingCount) ? 0.0 : 0.5 * FrontReachingElapsed / nfrontReachingCount;
+                    eta += std::isnan(TargetFindingElapsed / nTargetFindingCount) ? 0.0 : 0.5 * TargetFindingElapsed / nTargetFindingCount;
+                    
+                    eta += nObsStaticCount >= 0.0f ? nObsStaticCount : 10;
+                    eta += nObsDynamicCount >= 0.0f ? nObsDynamicCount : 10;
+                    eta += nlookAroundCount >= 0.0f ? nlookAroundCount : 30;
+                    eta += nTargetFindingCount >= 0.0f ? 0.5*nTargetFindingCount : 15;
+                    eta += nTargetFindingCount >= 0.0f ? 0.5*nTargetFindingCount : 15;
+                    eta += closeBallCount;
+                    eta += closeStaticObsCount;                
+        
+                    // Percentage
+                    float percentage = ( std::isnan(ObsStaticElapsed / nObsStaticCount) ? 0.0 : ObsStaticElapsed 
+                    + std::isnan(ObsDynamicElapsed / nObsDynamicCount) ? 0.0 : ObsDynamicElapsed
+                    + std::isnan(LookAroundElapsed / nlookAroundCount) ? 0.0 : LookAroundElapsed ) 
+                    / elapsed.count();
+                    eta += percentage > 0.0f ? percentage : 1.0f;  
+                    cFlag.fitness(1.0 / eta);
                     cFlag.task_elapsed(elapsed.count());
-                    cFlag.avg_obsstatic_elapsed(ObsStaticElapsed / nObsStaticCount);
-                    cFlag.obsstatic_timer(nObsStaticCount);
-                    cFlag.avg_obsdynamic_elapsed(ObsDynamicElapsed / nObsDynamicCount);
-                    cFlag.obsdynamic_timer(nObsDynamicCount);
-                    cFlag.avg_targetfinding_elapsed(TargetFindingElapsed / nTargetFindingCount);
-                    cFlag.targetfinding_timer(nTargetFindingCount);
-                    cFlag.avg_frontreaching_elapsed(FrontReachingElapsed / nfrontReachingCount);
-                    cFlag.frontreaching_timer(nfrontReachingCount);
-                    cFlag.avg_lookaround_elapsed(LookAroundElapsed / nlookAroundCount);
-                    cFlag.lookaround_timer(nlookAroundCount);
-                    cFlag.avg_closeball_elapsed(closeBallTimer / closeBallCount);
-                    cFlag.closeball_timer(closeBallCount);
-                    cFlag.avg_closestaticobs_elapsed(closeStaticObsTimer / closeStaticObsCount);
-                    cFlag.closestaticobs_timer(closeStaticObsCount);
-                    cFlag.stuck_timer(nStuckEscapeCount);
+                    cFlag.hasStuck(0);
+                    cFlag.hasOverLimit(0);
+                    cFlag.hasOverTime(0);
                     od4->send(cFlag);
                 
                     // Reset all variables
@@ -787,6 +871,9 @@
                     lookAroundStartTime = std::chrono::high_resolution_clock::now();
                     lookAroundEndTime = std::chrono::high_resolution_clock::now(); 
 
+                    cur_pos = {-4.0f, -4.0f, 0.0f};
+                    pre_pos = {-4.0f, -4.0f, 0.0f};
+                    nStopCount = 0;
                     isParamRead = false;
                     break;
                 }
@@ -920,27 +1007,27 @@
          /*
              Stucks Escape for 5 secs
          */
-         if ( pre_front == -1.0f ){
-            pre_front = front;
-            nFrontReachingTimer += 1;
-         }
-         else if ( nFrontReachingTimer <= 500){
-            float dev = std::abs( pre_front - front );
-            if ( dev > front_dev ){
-                front_dev = dev;
-            }
-            nFrontReachingTimer += 1;
-         }
-         else{
-            if ( front_dev <= 0.1f ){
-                has_InterruptNeedToReDo_stuck = true;
-                std::cout << "Stucks at some positions, try to escape by redo..." << std::endl;
-                nStuckEscapeCount += 1;
-            }
-            nFrontReachingTimer = 0;
-            pre_front = -1.0f;
-            front_dev = -1.0f;
-         }
+        //  if ( pre_front == -1.0f ){
+        //     pre_front = front;
+        //     nFrontReachingTimer += 1;
+        //  }
+        //  else if ( nFrontReachingTimer <= 500){
+        //     float dev = std::abs( pre_front - front );
+        //     if ( dev > front_dev ){
+        //         front_dev = dev;
+        //     }
+        //     nFrontReachingTimer += 1;
+        //  }
+        //  else{
+        //     if ( front_dev <= 0.1f ){
+        //         has_InterruptNeedToReDo_stuck = true;
+        //         std::cout << "Stucks at some positions, try to escape by redo..." << std::endl;
+        //         nStuckEscapeCount += 1;
+        //     }
+        //     nFrontReachingTimer = 0;
+        //     pre_front = -1.0f;
+        //     front_dev = -1.0f;
+        //  }
 
  
          /*
