@@ -273,12 +273,32 @@
      float angTurn_lookAround = 90.0f / 180.0f * M_PI;
      float timer_lookAround = 2;
      bool ReadyToStart = false;
-     bool isParamRead = false;
+    //  // Best fitness until now(0.12748, 0.729327, 0.47505, 0.0253244, 0.742143, 0.20943, 0.600021, 0.984757, 0.46134, 0.935226, 0.00812422, 0.805374)
+    //  safeDist_ratio = 0.12748;
+    //  dodge_dist_totune = 1.0f * clamp<double>(0.729327,0.0,1.0);
+    //  cur_distToMove_ratio = 0.47505;
+    //  time_ToMove_ratio = 0.0253244;
+    //  cur_distToMove_goto_ratio = 0.742143;
+    //  time_ToMove_goto_ratio = 0.20943;
+    //  cur_distToMove_target_ratio = 0.600021;
+    //  time_ToMove_target_ratio = 0.984757;
+    //  angTurn_targetFinding = 360.0f / 180.0f * M_PI * clamp<double>(0.46134,0.0,1.0);
+    //  time_ToTurn_ratio = 0.935226;
+    // //  std::cout << "Received param of time to turn ratio: " << time_ToTurn_ratio << std::endl;
+    //  angTurn_lookAround = 360.0f / 180.0f * M_PI * clamp<double>(0.00812422,0.0,1.0);
+    // //  std::cout << "Received param of angle to turn of look around: " << angTurn_lookAround << std::endl;
+    //  if ( angTurn_lookAround <= 120.0f / 180.0f * M_PI )
+    //      timer_lookAround = 0;
+    //  else if ( angTurn_lookAround > 120.0f / 180.0f * M_PI && angTurn_lookAround <= 240.0f / 180.0f * M_PI )
+    //      timer_lookAround = 1;
+    //  else
+    //      timer_lookAround = 2;
+    //  ReadyToStart = true;
      auto onGAParamRead = [&safeDist_ratio, &dodge_dist_totune, &cur_distToMove_ratio,
                             &time_ToMove_ratio, &cur_distToMove_goto_ratio, &time_ToMove_goto_ratio,
                             &cur_distToMove_target_ratio, &time_ToMove_target_ratio, &angTurn_targetFinding,
                             &time_ToTurn_ratio, &angTurn_lookAround, &timer_lookAround,
-                            &ReadyToStart, &isParamRead
+                            &ReadyToStart
                             ](cluon::data::Envelope &&env){
          auto senderStamp = env.senderStamp();
          // Now, we unpack the cluon::data::Envelope to get the desired DistanceReading.
@@ -286,19 +306,20 @@
          
          // Store aim direction readings.
         //  std::lock_guard<std::mutex> lck(aimDirectionMutex);
-         if ( senderStamp == 0 && isParamRead == false ){
+        // Best fitness until now(0.12748, 0.729327, 0.47505, 0.0253244, 0.742143, 0.20943, 0.600021, 0.984757, 0.46134, 0.935226, 0.00812422, 0.805374)
+         if ( senderStamp == 0 ){
             safeDist_ratio = gaParammessage.safeDist_ratio();
-            dodge_dist_totune = gaParammessage.dodge_dist_totune();
+            dodge_dist_totune = 1.0f * clamp<double>(gaParammessage.dodge_dist_totune(),0.0,1.0);
             cur_distToMove_ratio = gaParammessage.cur_distToMove_ratio();
             time_ToMove_ratio = gaParammessage.time_ToMove_ratio();
             cur_distToMove_goto_ratio = gaParammessage.cur_distToMove_goto_ratio();
             time_ToMove_goto_ratio = gaParammessage.time_ToMove_goto_ratio();
             cur_distToMove_target_ratio = gaParammessage.cur_distToMove_target_ratio();
             time_ToMove_target_ratio = gaParammessage.time_ToMove_target_ratio();
-            angTurn_targetFinding = gaParammessage.angTurn_targetFinding();
+            angTurn_targetFinding = 360.0f / 180.0f * M_PI * clamp<double>(gaParammessage.angTurn_targetFinding(),0.0,1.0);
             time_ToTurn_ratio = gaParammessage.time_ToTurn_ratio();
             std::cout << "Received param of time to turn ratio: " << time_ToTurn_ratio << std::endl;
-            angTurn_lookAround = gaParammessage.angTurn_lookAround();
+            angTurn_lookAround = 360.0f / 180.0f * M_PI * clamp<double>(gaParammessage.angTurn_lookAround(),0.0,1.0);
             std::cout << "Received param of angle to turn of look around: " << angTurn_lookAround << std::endl;
             if ( angTurn_lookAround <= 120.0f / 180.0f * M_PI )
                 timer_lookAround = 0;
@@ -310,7 +331,8 @@
                 ReadyToStart = true;
             else
                 ReadyToStart = false;
-            isParamRead = true;
+            std::cout << "Received Ready to Start: " << gaParammessage.ReadyToStart() << std::endl;
+            std::cout << ",Ready to Start flag: " << ReadyToStart << std::endl;
          }
      };
      // Finally, we register our lambda for the message identifier for opendlv::proxy::DistanceReading.
@@ -502,11 +524,16 @@
          // Sleep for 10 ms to not let the loop run to fast
          std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
+         if ( hasTakeoff == false && ReadyToStart == false ){
+            continue;
+         }
+
          bool isTimeToStop = false;
          int16_t hasStuck = 0;
          int16_t hasOverLimit = 0;
          int16_t hasOverTime = 0;
          if ( hasTakeoff ){
+        //  if ( false ){
             const std::chrono::duration<double> elapsed_stop = std::chrono::high_resolution_clock::now() - taskStartTime;
             if ( elapsed_stop.count() >= 150 ){
                 isTimeToStop = true;
@@ -548,6 +575,7 @@
          }
           
          if ( isTimeToStop ){
+        //  if ( false ){
             // Terminate the loop
             // std::cout <<" Time to terminate the flying..." << std::endl;
             if ( hasTakeoff ){
@@ -588,7 +616,7 @@
                 opendlv::logic::sensation::CompleteFlag cFlag;
                 cFlag.task_completed(1);
                 double eta = 1.0;
-                eta += 100;
+                eta += 300;
                 eta += std::isnan(elapsed.count()) ? 0.0 : elapsed.count();
                 eta += std::isnan(ObsStaticElapsed / nObsStaticCount) ? 0.0 : ObsStaticElapsed / nObsStaticCount;
                 eta += std::isnan(ObsDynamicElapsed / nObsDynamicCount) ? 0.0 : ObsDynamicElapsed / nObsDynamicCount;
@@ -596,11 +624,11 @@
                 eta += std::isnan(FrontReachingElapsed / nfrontReachingCount) ? 0.0 : 0.5 * FrontReachingElapsed / nfrontReachingCount;
                 eta += std::isnan(TargetFindingElapsed / nTargetFindingCount) ? 0.0 : 0.5 * TargetFindingElapsed / nTargetFindingCount;
                 
-                eta += nObsStaticCount >= 0.0f ? nObsStaticCount : 10;
-                eta += nObsDynamicCount >= 0.0f ? nObsDynamicCount : 10;
-                eta += nlookAroundCount >= 0.0f ? nlookAroundCount : 30;
-                eta += nTargetFindingCount >= 0.0f ? 0.5*nTargetFindingCount : 15;
-                eta += nTargetFindingCount >= 0.0f ? 0.5*nTargetFindingCount : 15;
+                eta += nObsStaticCount >= 0.0f ? nObsStaticCount : 50;
+                eta += nObsDynamicCount >= 0.0f ? nObsDynamicCount : 50;
+                eta += nlookAroundCount >= 0.0f ? nlookAroundCount : 50;
+                eta += nTargetFindingCount >= 0.0f ? 0.5*nTargetFindingCount : 50;
+                eta += nTargetFindingCount >= 0.0f ? 0.5*nTargetFindingCount : 50;
                 eta += closeBallCount;
                 eta += closeStaticObsCount;                
     
@@ -615,7 +643,6 @@
                 cFlag.hasStuck(hasStuck);
                 cFlag.hasOverLimit(hasOverLimit);
                 cFlag.hasOverTime(hasOverTime);
-                od4->send(cFlag);
                 
                 // Reset all variables
                 distPathstate_vec.clear();
@@ -689,8 +716,11 @@
                 cur_pos = {-4.0f, -4.0f, 0.0f};
                 pre_pos = {-4.0f, -4.0f, 0.0f};
                 nStopCount = 0;
-                isParamRead = false;
                 isTimeToStop = false;
+
+                od4->send(cFlag);
+                std::cout <<" Complete flag sent and param reset..." << std::endl;
+                continue;
             }
          }
  
@@ -700,7 +730,7 @@
              - Check if the battery state is acceptable to take off
          */
          if ( hasTakeoff == false ){
-             if ( cur_state_battery_state > takeoff_batterythreshold && isParamRead ){
+             if ( cur_state_battery_state > takeoff_batterythreshold ){
                  std::cout <<" Start taking off..." << std::endl;
                  Takeoff(od4, 1.5f, 3);
                  while(cur_pos.z <= 1.5f){
@@ -736,6 +766,7 @@
                 if ( cur_state_battery_state <= homing_batterythreshold || nTargetTimer >= nTargeCount ) {
                     Landing(od4, 0.0f, 3);
                     Stopping(od4);
+                    hasTakeoff = false;
                     if ( nTargetTimer >= nTargeCount && is_chpad_found == 1 )
                         std::cout <<" Successfully do landing and stopping with all targets found..." << std::endl;
                     else if ( cur_state_battery_state <= homing_batterythreshold )
@@ -781,11 +812,11 @@
                     eta += std::isnan(FrontReachingElapsed / nfrontReachingCount) ? 0.0 : 0.5 * FrontReachingElapsed / nfrontReachingCount;
                     eta += std::isnan(TargetFindingElapsed / nTargetFindingCount) ? 0.0 : 0.5 * TargetFindingElapsed / nTargetFindingCount;
                     
-                    eta += nObsStaticCount >= 0.0f ? nObsStaticCount : 10;
-                    eta += nObsDynamicCount >= 0.0f ? nObsDynamicCount : 10;
-                    eta += nlookAroundCount >= 0.0f ? nlookAroundCount : 30;
-                    eta += nTargetFindingCount >= 0.0f ? 0.5*nTargetFindingCount : 15;
-                    eta += nTargetFindingCount >= 0.0f ? 0.5*nTargetFindingCount : 15;
+                    eta += nObsStaticCount;
+                    eta += nObsDynamicCount;
+                    eta += nlookAroundCount;
+                    eta += nTargetFindingCount;
+                    eta += nTargetFindingCount;
                     eta += closeBallCount;
                     eta += closeStaticObsCount;                
         
@@ -794,13 +825,12 @@
                     + std::isnan(ObsDynamicElapsed / nObsDynamicCount) ? 0.0 : ObsDynamicElapsed
                     + std::isnan(LookAroundElapsed / nlookAroundCount) ? 0.0 : LookAroundElapsed ) 
                     / elapsed.count();
-                    eta += percentage > 0.0f ? percentage : 1.0f;  
+                    eta += percentage;  
                     cFlag.fitness(1.0 / eta);
                     cFlag.task_elapsed(elapsed.count());
                     cFlag.hasStuck(0);
                     cFlag.hasOverLimit(0);
                     cFlag.hasOverTime(0);
-                    od4->send(cFlag);
                 
                     // Reset all variables
                     distPathstate_vec.clear();
@@ -874,8 +904,9 @@
                     cur_pos = {-4.0f, -4.0f, 0.0f};
                     pre_pos = {-4.0f, -4.0f, 0.0f};
                     nStopCount = 0;
-                    isParamRead = false;
-                    break;
+                    od4->send(cFlag);
+                    std::cout <<" Complete flag sent and param reset with task completes..." << std::endl;
+                    continue;
                 }
              }
          }
@@ -2268,34 +2299,39 @@
                     }
                 }               
                 
-                if ( cur_sortType == SORT_XBIG ){
-                    std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                        if( std::abs( a.front * std::cos( a.angle ) ) != std::abs( b.front * std::cos( b.angle ) ) )
-                            return std::abs( a.front * std::cos( a.angle ) ) > std::abs( b.front * std::cos( b.angle ) );
-                        return std::abs( a.front * std::cos( a.angle ) ) < std::abs( b.front * std::cos( b.angle ) );
-                    });
-                }
-                else if ( cur_sortType == SORT_YBIG ){
-                    std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                        if( std::abs( a.front * std::sin( a.angle ) ) != std::abs( b.front * std::sin( b.angle ) ) )
-                            return std::abs( a.front * std::sin( a.angle ) ) > std::abs( b.front * std::sin( b.angle ) );
-                        return std::abs( a.front * std::sin( a.angle ) ) < std::abs( b.front * std::sin( b.angle ) );
-                    });
-                }
-                else if ( cur_sortType == SORT_BIGTOSMALL ){
-                    std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                        if( a.front != b.front )
-                            return a.front > b.front;
-                        return a.angle < b.angle;
-                    });
-                }
-                else if ( cur_sortType == SORT_SMALLTOBIG ){
-                    std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                        if( a.front != b.front )
-                            return a.front < b.front;
-                        return a.angle < b.angle;
-                    });
-                }
+                // if ( cur_sortType == SORT_XBIG ){
+                //     std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                //         if( std::abs( a.front * std::cos( a.angle ) ) != std::abs( b.front * std::cos( b.angle ) ) )
+                //             return std::abs( a.front * std::cos( a.angle ) ) > std::abs( b.front * std::cos( b.angle ) );
+                //         return std::abs( a.front * std::cos( a.angle ) ) < std::abs( b.front * std::cos( b.angle ) );
+                //     });
+                // }
+                // else if ( cur_sortType == SORT_YBIG ){
+                //     std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                //         if( std::abs( a.front * std::sin( a.angle ) ) != std::abs( b.front * std::sin( b.angle ) ) )
+                //             return std::abs( a.front * std::sin( a.angle ) ) > std::abs( b.front * std::sin( b.angle ) );
+                //         return std::abs( a.front * std::sin( a.angle ) ) < std::abs( b.front * std::sin( b.angle ) );
+                //     });
+                // }
+                // else if ( cur_sortType == SORT_BIGTOSMALL ){
+                //     std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                //         if( a.front != b.front )
+                //             return a.front > b.front;
+                //         return a.angle < b.angle;
+                //     });
+                // }
+                // else if ( cur_sortType == SORT_SMALLTOBIG ){
+                //     std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                //         if( a.front != b.front )
+                //             return a.front < b.front;
+                //         return a.angle < b.angle;
+                //     });
+                // }
+                std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                    if( a.front != b.front )
+                        return a.front > b.front;
+                    return a.angle < b.angle;
+                });
  
                  // Check for clear path
                  std::cout <<" Start path checking with angle vector size: " << angleFrontState_vec.size() << std::endl;
@@ -2449,34 +2485,39 @@
                         }
                     }               
                     
-                    if ( cur_sortType == SORT_XBIG ){
-                        std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                            if( std::abs( a.front * std::cos( a.angle ) ) != std::abs( b.front * std::cos( b.angle ) ) )
-                                return std::abs( a.front * std::cos( a.angle ) ) > std::abs( b.front * std::cos( b.angle ) );
-                            return std::abs( a.front * std::cos( a.angle ) ) < std::abs( b.front * std::cos( b.angle ) );
-                        });
-                    }
-                    else if ( cur_sortType == SORT_YBIG ){
-                        std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                            if( std::abs( a.front * std::sin( a.angle ) ) != std::abs( b.front * std::sin( b.angle ) ) )
-                                return std::abs( a.front * std::sin( a.angle ) ) > std::abs( b.front * std::sin( b.angle ) );
-                            return std::abs( a.front * std::sin( a.angle ) ) < std::abs( b.front * std::sin( b.angle ) );
-                        });
-                    }
-                    else if ( cur_sortType == SORT_BIGTOSMALL ){
-                        std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                            if( a.front != b.front )
-                                return a.front > b.front;
-                            return a.angle < b.angle;
-                        });
-                    }
-                    else if ( cur_sortType == SORT_SMALLTOBIG ){
-                        std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                            if( a.front != b.front )
-                                return a.front < b.front;
-                            return a.angle < b.angle;
-                        });
-                    }
+                    // if ( cur_sortType == SORT_XBIG ){
+                    //     std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                    //         if( std::abs( a.front * std::cos( a.angle ) ) != std::abs( b.front * std::cos( b.angle ) ) )
+                    //             return std::abs( a.front * std::cos( a.angle ) ) > std::abs( b.front * std::cos( b.angle ) );
+                    //         return std::abs( a.front * std::cos( a.angle ) ) < std::abs( b.front * std::cos( b.angle ) );
+                    //     });
+                    // }
+                    // else if ( cur_sortType == SORT_YBIG ){
+                    //     std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                    //         if( std::abs( a.front * std::sin( a.angle ) ) != std::abs( b.front * std::sin( b.angle ) ) )
+                    //             return std::abs( a.front * std::sin( a.angle ) ) > std::abs( b.front * std::sin( b.angle ) );
+                    //         return std::abs( a.front * std::sin( a.angle ) ) < std::abs( b.front * std::sin( b.angle ) );
+                    //     });
+                    // }
+                    // else if ( cur_sortType == SORT_BIGTOSMALL ){
+                    //     std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                    //         if( a.front != b.front )
+                    //             return a.front > b.front;
+                    //         return a.angle < b.angle;
+                    //     });
+                    // }
+                    // else if ( cur_sortType == SORT_SMALLTOBIG ){
+                    //     std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                    //         if( a.front != b.front )
+                    //             return a.front < b.front;
+                    //         return a.angle < b.angle;
+                    //     });
+                    // }
+                    std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                        if( a.front != b.front )
+                            return a.front > b.front;
+                        return a.angle < b.angle;
+                    });
  
                      // Check for clear path
                      std::cout <<" Start path checking..." << std::endl;

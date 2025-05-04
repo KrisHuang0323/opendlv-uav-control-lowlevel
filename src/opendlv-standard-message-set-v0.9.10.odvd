@@ -412,3 +412,7 @@ message opendlv.logic.sensation.CompleteFlag [id = 1197] {
   uint16 hasOverLimit [id = 5];
   uint16 hasOverTime [id = 6];
 }
+
+message opendlv.logic.sensation.ResetFlag [id = 1198] {
+  uint16 reset_completed [id = 1];
+}

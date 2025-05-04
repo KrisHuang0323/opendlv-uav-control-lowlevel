@@ -96,7 +96,7 @@ int32_t main(int32_t argc, char **argv) {
         double eta{0.0};
 
         struct flagStruct{
-          int16_t task_completed{0};
+          int16_t task_completed{1};
           double fitness{0};
           float task_elapsed{0.0f};
           int16_t hasStuck{0};
@@ -124,6 +124,18 @@ int32_t main(int32_t argc, char **argv) {
             }};
 
           od4.dataTrigger(opendlv::logic::sensation::CompleteFlag::ID(), onFlagRead);
+
+          int16_t reset_completed = 0;
+          auto onResetFlagRead{[&reset_completed](
+            cluon::data::Envelope &&envelope)
+          {
+            auto msg = cluon::extractMessage<opendlv::logic::sensation::ResetFlag>(
+                std::move(envelope));
+
+            reset_completed = msg.reset_completed();
+          }};
+
+          od4.dataTrigger(opendlv::logic::sensation::ResetFlag::ID(), onResetFlagRead);
 
           struct cfPos {
               float x;
@@ -180,6 +192,21 @@ int32_t main(int32_t argc, char **argv) {
           while(cur_flagStruct.task_completed == 1){
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
           } // Wait until task set
+
+          gaParam.safeDist_ratio(ind[0]);
+          gaParam.dodge_dist_totune(ind[1]);
+          gaParam.cur_distToMove_ratio(ind[2]);
+          gaParam.time_ToMove_ratio(ind[3]);
+          gaParam.cur_distToMove_goto_ratio(ind[4]);
+          gaParam.time_ToMove_goto_ratio(ind[5]);
+          gaParam.cur_distToMove_target_ratio(ind[6]);
+          gaParam.time_ToMove_target_ratio(ind[7]);
+          gaParam.angTurn_targetFinding(ind[8]);
+          gaParam.time_ToTurn_ratio(ind[9]);
+          gaParam.angTurn_lookAround(ind[10]);
+          gaParam.ReadyToStart(0);
+          od4.send(gaParam);
+
           std::cout << "Start the " << cid << " thread training..." << std::endl;          
           std::cout << ", with params: " << std::endl;
           for (uint32_t i{0}; i < 12; i++) {
@@ -206,12 +233,19 @@ int32_t main(int32_t argc, char **argv) {
             od4.send(cfcommand, sampleTime, 4);
 
             float dist = std::sqrt(std::pow(cur_pos.x,2) + std::pow(cur_pos.y,2));
-            while( dist > 0.01f || std::abs( cur_state_yaw ) >= 1.0f / 180.0f * M_PI ){
+            auto waitStartTime = std::chrono::high_resolution_clock::now();
+            while( dist > 0.01f || std::abs( cur_state_yaw ) >= 1.0f / 180.0f * M_PI || reset_completed == 0 ){
               std::this_thread::sleep_for(std::chrono::milliseconds(10));
               dist = std::sqrt(std::pow(cur_pos.x,2) + std::pow(cur_pos.y,2));
+              const std::chrono::duration<double> elapsed = std::chrono::high_resolution_clock::now() - waitStartTime;
+              if ( elapsed.count() >= 10 ){
+                opendlv::logic::action::CrazyFlieCommand cfcommand;
+                cluon::data::TimeStamp sampleTime;
+                od4.send(cfcommand, sampleTime, 4);
+                waitStartTime = std::chrono::high_resolution_clock::now();
+              } // Resend reset position after to seconds passed
               // std::cout << "The distance is: " << dist << ",x: " << cur_pos.x << ",y: " << cur_pos.y << std::endl;
             } // Wait until the current position back to (0,0)
-              std::this_thread::sleep_for(std::chrono::milliseconds(5000));
             std::cout << "The " << cid << " thread training complete reset..." << std::endl;
           }
 

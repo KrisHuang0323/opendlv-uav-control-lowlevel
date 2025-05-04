@@ -92,7 +92,7 @@ endif()
 
 # Tell the compiler what executable we want, and what libraries to link
 add_executable(${PROJECT_NAME}
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/${PROJECT_NAME}.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/${PROJECT_NAME}_sim.cpp
   ${CMAKE_BINARY_DIR}/opendlv-standard-message-set.hpp
   ${CMAKE_BINARY_DIR}/cluon-complete.hpp
   # ${CMAKE_CURRENT_SOURCE_DIR}/src/test_include.cpp
