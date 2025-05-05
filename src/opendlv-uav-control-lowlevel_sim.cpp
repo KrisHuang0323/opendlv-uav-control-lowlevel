@@ -316,17 +316,18 @@
             time_ToMove_goto_ratio = gaParammessage.time_ToMove_goto_ratio();
             cur_distToMove_target_ratio = gaParammessage.cur_distToMove_target_ratio();
             time_ToMove_target_ratio = gaParammessage.time_ToMove_target_ratio();
-            angTurn_targetFinding = 360.0f / 180.0f * M_PI * clamp<double>(gaParammessage.angTurn_targetFinding(),0.0,1.0);
+            angTurn_targetFinding = 120.0f / 180.0f * M_PI * clamp<double>(gaParammessage.angTurn_targetFinding(),0.0,1.0);
             time_ToTurn_ratio = gaParammessage.time_ToTurn_ratio();
             std::cout << "Received param of time to turn ratio: " << time_ToTurn_ratio << std::endl;
+            std::cout << "Received param of angle to turn of look around: " << gaParammessage.angTurn_lookAround() << std::endl;
             angTurn_lookAround = 360.0f / 180.0f * M_PI * clamp<double>(gaParammessage.angTurn_lookAround(),0.0,1.0);
-            std::cout << "Received param of angle to turn of look around: " << angTurn_lookAround << std::endl;
             if ( angTurn_lookAround <= 120.0f / 180.0f * M_PI )
                 timer_lookAround = 0;
             else if ( angTurn_lookAround > 120.0f / 180.0f * M_PI && angTurn_lookAround <= 240.0f / 180.0f * M_PI )
                 timer_lookAround = 1;
             else
                 timer_lookAround = 2;
+            angTurn_lookAround = angTurn_lookAround / (timer_lookAround + 1);
             if ( gaParammessage.ReadyToStart() == 1 )
                 ReadyToStart = true;
             else
