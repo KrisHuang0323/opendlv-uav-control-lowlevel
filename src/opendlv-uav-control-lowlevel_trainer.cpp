@@ -228,6 +228,7 @@ int32_t main(int32_t argc, char **argv) {
             std::cout << ", has stuck: " << cur_flagStruct.hasStuck << ", has over limit: " << cur_flagStruct.hasOverLimit << ", has over time: " << cur_flagStruct.hasOverTime << std::endl;
 
             // Reset position
+            std::this_thread::sleep_for(std::chrono::milliseconds(3000));
             opendlv::logic::action::CrazyFlieCommand cfcommand;
             cluon::data::TimeStamp sampleTime;
             od4.send(cfcommand, sampleTime, 4);

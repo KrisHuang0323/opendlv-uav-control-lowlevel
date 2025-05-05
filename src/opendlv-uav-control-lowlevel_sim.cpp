@@ -273,19 +273,19 @@
      float angTurn_lookAround = 90.0f / 180.0f * M_PI;
      float timer_lookAround = 2;
      bool ReadyToStart = false;
-    //  // Best fitness until now(0.12748, 0.729327, 0.47505, 0.0253244, 0.742143, 0.20943, 0.600021, 0.984757, 0.46134, 0.935226, 0.00812422, 0.805374)
-    //  safeDist_ratio = 0.12748;
-    //  dodge_dist_totune = 1.0f * clamp<double>(0.729327,0.0,1.0);
-    //  cur_distToMove_ratio = 0.47505;
-    //  time_ToMove_ratio = 0.0253244;
-    //  cur_distToMove_goto_ratio = 0.742143;
-    //  time_ToMove_goto_ratio = 0.20943;
-    //  cur_distToMove_target_ratio = 0.600021;
-    //  time_ToMove_target_ratio = 0.984757;
-    //  angTurn_targetFinding = 360.0f / 180.0f * M_PI * clamp<double>(0.46134,0.0,1.0);
-    //  time_ToTurn_ratio = 0.935226;
+    //  // Best fitness until now(0.610482, 0.290444, 0.299552, 0.380354, 0.903012, 0.71108, 0.729205, 0.800282, 0.253018, 0.913777, 0.391905, 0.81762)
+    //  safeDist_ratio = 0.610482;
+    //  dodge_dist_totune = 1.0f * clamp<double>(0.290444,0.0,1.0);
+    //  cur_distToMove_ratio = 0.299552;
+    //  time_ToMove_ratio = 0.380354;
+    //  cur_distToMove_goto_ratio = 0.903012;
+    //  time_ToMove_goto_ratio = 0.71108;
+    //  cur_distToMove_target_ratio = 0.729205;
+    //  time_ToMove_target_ratio = 0.800282;
+    //  angTurn_targetFinding = 360.0f / 180.0f * M_PI * clamp<double>(0.253018,0.0,1.0);
+    //  time_ToTurn_ratio = 0.913777;
     // //  std::cout << "Received param of time to turn ratio: " << time_ToTurn_ratio << std::endl;
-    //  angTurn_lookAround = 360.0f / 180.0f * M_PI * clamp<double>(0.00812422,0.0,1.0);
+    //  angTurn_lookAround = 360.0f / 180.0f * M_PI * clamp<double>(0.391905,0.0,1.0);
     // //  std::cout << "Received param of angle to turn of look around: " << angTurn_lookAround << std::endl;
     //  if ( angTurn_lookAround <= 120.0f / 180.0f * M_PI )
     //      timer_lookAround = 0;
@@ -306,10 +306,10 @@
          
          // Store aim direction readings.
         //  std::lock_guard<std::mutex> lck(aimDirectionMutex);
-        // Best fitness until now(0.12748, 0.729327, 0.47505, 0.0253244, 0.742143, 0.20943, 0.600021, 0.984757, 0.46134, 0.935226, 0.00812422, 0.805374)
+        // Best fitness until now=>0.00966(0.610482, 0.290444, 0.299552, 0.380354, 0.903012, 0.71108, 0.729205, 0.800282, 0.253018, 0.913777, 0.391905, 0.81762)
          if ( senderStamp == 0 ){
             safeDist_ratio = gaParammessage.safeDist_ratio();
-            dodge_dist_totune = 1.0f * clamp<double>(gaParammessage.dodge_dist_totune(),0.0,1.0);
+            dodge_dist_totune = 0.3f * clamp<double>(gaParammessage.dodge_dist_totune(),0.0,1.0);
             cur_distToMove_ratio = gaParammessage.cur_distToMove_ratio();
             time_ToMove_ratio = gaParammessage.time_ToMove_ratio();
             cur_distToMove_goto_ratio = gaParammessage.cur_distToMove_goto_ratio();
@@ -764,6 +764,7 @@
              // Find the charging pad, stop and do landing
              if ( (is_chpad_found == 1||(dist_to_reach * std::cos( aimDirection_to_reach ) <= 30.0f && dist_to_reach <= 150.0f && dist_to_reach != -1.0f)) ){
                 if ( cur_state_battery_state <= homing_batterythreshold || nTargetTimer >= nTargeCount ) {
+                    Landing(od4, 0.5f, 3);
                     Landing(od4, 0.0f, 3);
                     Stopping(od4);
                     hasTakeoff = false;
