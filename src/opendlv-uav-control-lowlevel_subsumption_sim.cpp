@@ -103,6 +103,11 @@ float wrap_angle(float angle) {
     return (angle > M_PI) ? (angle - 2 * M_PI) : angle;
 }
 
+template<typename T>
+constexpr const T& clamp(const T& v, const T& lo, const T& hi) {
+    return (v < lo) ? lo : (hi < v) ? hi : v;
+}
+
 int32_t main(int32_t argc, char **argv) {
     int32_t retCode{1};
     auto commandlineArguments = cluon::getCommandlineArguments(argc, argv);
@@ -283,8 +288,7 @@ int32_t main(int32_t argc, char **argv) {
     //  cur_constVarStruct.dodge_dist_totune = 1.0f * clamp<double>(0.715608,0.0,1.0);
     cur_constVarStruct.cur_distToMove_ratio = 0.857911;
     cur_constVarStruct.time_ToMove_ratio = 0.240129;
-    cur_constVarStru
-    ct.cur_distToMove_goto_ratio = 0.793526;
+    cur_constVarStruct.cur_distToMove_goto_ratio = 0.793526;
     cur_constVarStruct.time_ToMove_goto_ratio = 0.645228;
     cur_constVarStruct.cur_distToMove_target_ratio = 0.7371;
     cur_constVarStruct.time_ToMove_target_ratio = 0.715185;
