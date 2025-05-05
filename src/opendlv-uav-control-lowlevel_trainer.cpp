@@ -234,17 +234,17 @@ int32_t main(int32_t argc, char **argv) {
             od4.send(cfcommand, sampleTime, 4);
 
             // float dist = std::sqrt(std::pow(cur_pos.x,2) + std::pow(cur_pos.y,2));
-            // auto waitStartTime = std::chrono::high_resolution_clock::now();
+            auto waitStartTime = std::chrono::high_resolution_clock::now();
             while( reset_completed == 0 ){
               std::this_thread::sleep_for(std::chrono::milliseconds(10));
               // dist = std::sqrt(std::pow(cur_pos.x,2) + std::pow(cur_pos.y,2));
-              // const std::chrono::duration<double> elapsed = std::chrono::high_resolution_clock::now() - waitStartTime;
-              // if ( elapsed.count() >= 10 ){
-              //   opendlv::logic::action::CrazyFlieCommand cfcommand;
-              //   cluon::data::TimeStamp sampleTime;
-              //   od4.send(cfcommand, sampleTime, 4);
-              //   waitStartTime = std::chrono::high_resolution_clock::now();
-              // } // Resend reset position after to seconds passed
+              const std::chrono::duration<double> elapsed = std::chrono::high_resolution_clock::now() - waitStartTime;
+              if ( elapsed.count() >= 10 ){
+                opendlv::logic::action::CrazyFlieCommand cfcommand;
+                cluon::data::TimeStamp sampleTime;
+                od4.send(cfcommand, sampleTime, 4);
+                waitStartTime = std::chrono::high_resolution_clock::now();
+              } // Resend reset position after to seconds passed
               // std::cout << "The distance is: " << dist << ",x: " << cur_pos.x << ",y: " << cur_pos.y << std::endl;
             } // Wait until the current position back to (0,0)
             std::cout << "The " << cid << " thread training complete reset..." << std::endl;

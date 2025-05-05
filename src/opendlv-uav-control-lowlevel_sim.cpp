@@ -273,7 +273,7 @@
      float angTurn_lookAround = 90.0f / 180.0f * M_PI;
      float timer_lookAround = 2;
      bool ReadyToStart = false;
-    //  // Best fitness until now(0.610482, 0.290444, 0.299552, 0.380354, 0.903012, 0.71108, 0.729205, 0.800282, 0.253018, 0.913777, 0.391905, 0.81762)
+     // 0.00931262 (0.341499, 0.715608, 0.857911, 0.240129, 0.793526, 0.645228, 0.7371, 0.715185, 0.303878, 0.83811, 0.41183, 0.129048)
     //  safeDist_ratio = 0.610482;
     //  dodge_dist_totune = 1.0f * clamp<double>(0.290444,0.0,1.0);
     //  cur_distToMove_ratio = 0.299552;
@@ -579,6 +579,7 @@
             // Terminate the loop
             // std::cout <<" Time to terminate the flying..." << std::endl;
             if ( hasTakeoff ){
+                Landing(od4, 0.5f, 3);
                 Landing(od4, 0.0f, 3);
                 Stopping(od4);
                 hasTakeoff = false;
