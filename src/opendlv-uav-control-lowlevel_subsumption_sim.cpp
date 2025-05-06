@@ -2541,7 +2541,7 @@ int32_t main(int32_t argc, char **argv) {
                                     angTurn -= 10.0f / 180.0f * M_PI;
                                 }
                                 int16_t time_toTurn = static_cast<int>(std::round( clamp<double>(std::abs( angTurn ) * time_ToTurn_ratio, 1.0f, 5.0f) ));
-                                Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
+                                Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn * 2);
                                 cur_targetCheckState.turnStarted = true;
                                 break;
                             }
@@ -2608,7 +2608,7 @@ int32_t main(int32_t argc, char **argv) {
                                 angTurn -= 10.0f / 180.0f * M_PI;
                             }
                             int16_t time_toTurn = static_cast<int>(std::round( clamp<double>(std::abs( angTurn ) * time_ToTurn_ratio, 1.0f, 5.0f) ));
-                            Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn); 
+                            Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn * 2); 
                             on_TURNING_MODE = true; 
                             
                             // Set variables back
@@ -2691,7 +2691,7 @@ int32_t main(int32_t argc, char **argv) {
                                         angTurn -= 10.0f / 180.0f * M_PI;
                                     }
                                     int16_t time_toTurn = static_cast<int>(std::round( clamp<double>(std::abs( angTurn ) * time_ToTurn_ratio, 1.0f, 5.0f) ));
-                                    Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn);
+                                    Goto(od4, 0.0f, 0.0f, 0.0f, angTurn, time_toTurn * 2);
                                     break;
                                 }
                             }
@@ -3730,6 +3730,11 @@ int32_t main(int32_t argc, char **argv) {
                             cur_lookAroundState.targetAngle = pair_cand.angle;
 
                             // Try to turn to the angle
+                            if ( cur_suppressStruct.isObsStaticDominating || cur_suppressStruct.isObsDynamicDominating
+                                || cur_suppressStruct.isTargetFindingDominating || cur_suppressStruct.isFrontReachingDominating ){
+                                // std::cout << "look around task being suppressed!" << std::endl;
+                                continue;
+                            }   // Wait until the domination change to target finding
                             // std::cout <<" Current angle: " << cur_state_yaw << std::endl;
                             // std::cout <<" Target angle: " << cur_lookAroundState.targetAngle << std::endl;
                             // std::cout <<" Vector size: " << angleFrontState_vec.size() << std::endl;
@@ -3759,6 +3764,11 @@ int32_t main(int32_t argc, char **argv) {
                         cur_lookAroundState.targetAngle = cur_lookAroundState.preAngle;
 
                         // Try to turn to the angle
+                        if ( cur_suppressStruct.isObsStaticDominating || cur_suppressStruct.isObsDynamicDominating
+                            || cur_suppressStruct.isTargetFindingDominating || cur_suppressStruct.isFrontReachingDominating ){
+                            // std::cout << "look around task being suppressed!" << std::endl;
+                            continue;
+                        }   // Wait until the domination change to target finding
                         // std::cout <<" Current angle: " << cur_state_yaw << std::endl;
                         // std::cout <<" Target angle: " << cur_lookAroundState.targetAngle << std::endl;
                         // std::cout <<" Vector size: " << angleFrontState_vec.size() << std::endl;
@@ -3790,6 +3800,11 @@ int32_t main(int32_t argc, char **argv) {
                 if ( std::abs( angleDifference( cur_lookAroundState.targetAngle, cur_state_yaw ) ) >= 5.0f / 180.0f * M_PI ){
                     if ( has_possibleInterrupt || has_possibleInterrupt_dynamic ){
                         std::cout <<" Some targets occur, so try to turn to the target look up angle again..." << std::endl;
+                        if ( cur_suppressStruct.isObsStaticDominating || cur_suppressStruct.isObsDynamicDominating
+                            || cur_suppressStruct.isTargetFindingDominating || cur_suppressStruct.isFrontReachingDominating ){
+                            // std::cout << "look around task being suppressed!" << std::endl;
+                            continue;
+                        }   // Wait until the domination change to target finding
                         float angTurn = angleDifference( cur_state_yaw, cur_lookAroundState.targetAngle ) + 5.0f / 180.0f * M_PI;
                         if ( angleDifference( cur_state_yaw, cur_lookAroundState.targetAngle ) < 0.0f ){
                             angTurn -= 10.0f / 180.0f * M_PI;
@@ -3849,6 +3864,11 @@ int32_t main(int32_t argc, char **argv) {
                 }
                 else{
                     // Ready to go to path
+                    if ( cur_suppressStruct.isObsStaticDominating || cur_suppressStruct.isObsDynamicDominating
+                        || cur_suppressStruct.isTargetFindingDominating || cur_suppressStruct.isFrontReachingDominating ){
+                        // std::cout << "look around task being suppressed!" << std::endl;
+                        continue;
+                    }   // Wait until the domination change to target finding
                     std::cout <<" Turn to the target angle, ready to go to it..." << std::endl;
                     Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false);
                     std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -3884,34 +3904,39 @@ int32_t main(int32_t argc, char **argv) {
                             }
                         }               
                         
-                        if ( cur_sortType == SORT_XBIG ){
-                            std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                                if( std::abs( a.front * std::cos( a.angle ) ) != std::abs( b.front * std::cos( b.angle ) ) )
-                                    return std::abs( a.front * std::cos( a.angle ) ) > std::abs( b.front * std::cos( b.angle ) );
-                                return std::abs( a.front * std::cos( a.angle ) ) < std::abs( b.front * std::cos( b.angle ) );
-                            });
-                        }
-                        else if ( cur_sortType == SORT_YBIG ){
-                            std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                                if( std::abs( a.front * std::sin( a.angle ) ) != std::abs( b.front * std::sin( b.angle ) ) )
-                                    return std::abs( a.front * std::sin( a.angle ) ) > std::abs( b.front * std::sin( b.angle ) );
-                                return std::abs( a.front * std::sin( a.angle ) ) < std::abs( b.front * std::sin( b.angle ) );
-                            });
-                        }
-                        else if ( cur_sortType == SORT_BIGTOSMALL ){
-                            std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                                if( a.front != b.front )
-                                    return a.front > b.front;
-                                return a.angle < b.angle;
-                            });
-                        }
-                        else if ( cur_sortType == SORT_SMALLTOBIG ){
-                            std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
-                                if( a.front != b.front )
-                                    return a.front < b.front;
-                                return a.angle < b.angle;
-                            });
-                        }
+                        // if ( cur_sortType == SORT_XBIG ){
+                        //     std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                        //         if( std::abs( a.front * std::cos( a.angle ) ) != std::abs( b.front * std::cos( b.angle ) ) )
+                        //             return std::abs( a.front * std::cos( a.angle ) ) > std::abs( b.front * std::cos( b.angle ) );
+                        //         return std::abs( a.front * std::cos( a.angle ) ) < std::abs( b.front * std::cos( b.angle ) );
+                        //     });
+                        // }
+                        // else if ( cur_sortType == SORT_YBIG ){
+                        //     std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                        //         if( std::abs( a.front * std::sin( a.angle ) ) != std::abs( b.front * std::sin( b.angle ) ) )
+                        //             return std::abs( a.front * std::sin( a.angle ) ) > std::abs( b.front * std::sin( b.angle ) );
+                        //         return std::abs( a.front * std::sin( a.angle ) ) < std::abs( b.front * std::sin( b.angle ) );
+                        //     });
+                        // }
+                        // else if ( cur_sortType == SORT_BIGTOSMALL ){
+                        //     std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                        //         if( a.front != b.front )
+                        //             return a.front > b.front;
+                        //         return a.angle < b.angle;
+                        //     });
+                        // }
+                        // else if ( cur_sortType == SORT_SMALLTOBIG ){
+                        //     std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                        //         if( a.front != b.front )
+                        //             return a.front < b.front;
+                        //         return a.angle < b.angle;
+                        //     });
+                        // }
+                        std::sort(angleFrontState_vec.begin(), angleFrontState_vec.end(), [](const angleFrontState& a, const angleFrontState& b) {
+                            if( a.front != b.front )
+                                return a.front > b.front;
+                            return a.angle < b.angle;
+                        });
                         {
                             std::lock_guard<std::mutex> lck(lookAroundMutex);
                             cur_lookAroundStruct.cur_sortType = cur_sortType;
@@ -3960,6 +3985,11 @@ int32_t main(int32_t argc, char **argv) {
                                 cur_lookAroundState.targetAngle = pair_cand.angle;
 
                                 // Try to turn to the angle
+                                if ( cur_suppressStruct.isObsStaticDominating || cur_suppressStruct.isObsDynamicDominating
+                                    || cur_suppressStruct.isTargetFindingDominating || cur_suppressStruct.isFrontReachingDominating ){
+                                    // std::cout << "look around task being suppressed!" << std::endl;
+                                    continue;
+                                }   // Wait until the domination change to target finding
                                 // std::cout <<" Current angle: " << cur_state_yaw << std::endl;
                                 // std::cout <<" Target angle: " << cur_lookAroundState.targetAngle << std::endl;
                                 // std::cout <<" Vector size: " << angleFrontState_vec.size() << std::endl;
@@ -3989,6 +4019,11 @@ int32_t main(int32_t argc, char **argv) {
                         cur_lookAroundState.targetAngle = cur_lookAroundState.preAngle;
 
                         // Try to turn to the angle
+                        if ( cur_suppressStruct.isObsStaticDominating || cur_suppressStruct.isObsDynamicDominating
+                            || cur_suppressStruct.isTargetFindingDominating || cur_suppressStruct.isFrontReachingDominating ){
+                            // std::cout << "look around task being suppressed!" << std::endl;
+                            continue;
+                        }   // Wait until the domination change to target finding
                         // std::cout <<" Current angle: " << cur_state_yaw << std::endl;
                         // std::cout <<" Target angle: " << cur_lookAroundState.targetAngle << std::endl;
                         // std::cout <<" Vector size: " << angleFrontState_vec.size() << std::endl;
