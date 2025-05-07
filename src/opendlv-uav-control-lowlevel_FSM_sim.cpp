@@ -279,26 +279,50 @@
      // Rooms fitness:
      // Best fitness until now=>(36.7 sec)0.0157917 (0.0884062, 0.832334, 0.960318, 0.247781, 0.148714, 0.308037, 0.544328, 0.164879, 0.22922, 0.258119, 0.889263, 0.882657)
      // 0.0140153 (0.0107241, 0.321034, 0.157157, 0.59527, 0.370962, 0.0190635, 0.466485, 0.940148, 0.149737, 0.661322, 0.767432, 0.0239002)
-     safeDist_ratio = 0.341499;
-     dodge_dist_totune = 0.3f * clamp<double>(0.715608,0.0,1.0);
-    //  dodge_dist_totune = 1.0f * clamp<double>(0.715608,0.0,1.0);
-     cur_distToMove_ratio = 0.857911;
-     time_ToMove_ratio = 0.240129;
-     cur_distToMove_goto_ratio = 0.793526;
-     time_ToMove_goto_ratio = 0.645228;
-     cur_distToMove_target_ratio = 0.7371;
-     time_ToMove_target_ratio = 0.715185;
-     angTurn_targetFinding = 360.0f / 180.0f * M_PI * clamp<double>(0.303878,0.0,1.0);
-    //  angTurn_targetFinding = 120.0f / 180.0f * M_PI * clamp<double>(0.303878,0.0,1.0);
-     time_ToTurn_ratio = 0.83811;
-     angTurn_lookAround = 360.0f / 180.0f * M_PI * clamp<double>(0.41183,0.0,1.0);
-     if ( angTurn_lookAround <= 120.0f / 180.0f * M_PI )
-         timer_lookAround = 0;
-     else if ( angTurn_lookAround > 120.0f / 180.0f * M_PI && angTurn_lookAround <= 240.0f / 180.0f * M_PI )
-         timer_lookAround = 1;
-     else
-         timer_lookAround = 2;
-    //  angTurn_lookAround = angTurn_lookAround / (timer_lookAround + 1);
+     if ( maptype == 1){
+        safeDist_ratio = 0.341499;
+        dodge_dist_totune = 0.3f * clamp<double>(0.715608,0.0,1.0);
+       //  dodge_dist_totune = 1.0f * clamp<double>(0.715608,0.0,1.0);
+        cur_distToMove_ratio = 0.857911;
+        time_ToMove_ratio = 0.240129;
+        cur_distToMove_goto_ratio = 0.793526;
+        time_ToMove_goto_ratio = 0.645228;
+        cur_distToMove_target_ratio = 0.7371;
+        time_ToMove_target_ratio = 0.715185;
+        angTurn_targetFinding = 360.0f / 180.0f * M_PI * clamp<double>(0.303878,0.0,1.0);
+       //  angTurn_targetFinding = 120.0f / 180.0f * M_PI * clamp<double>(0.303878,0.0,1.0);
+        time_ToTurn_ratio = 0.83811;
+        angTurn_lookAround = 360.0f / 180.0f * M_PI * clamp<double>(0.41183,0.0,1.0);
+        if ( angTurn_lookAround <= 120.0f / 180.0f * M_PI )
+            timer_lookAround = 0;
+        else if ( angTurn_lookAround > 120.0f / 180.0f * M_PI && angTurn_lookAround <= 240.0f / 180.0f * M_PI )
+            timer_lookAround = 1;
+        else
+            timer_lookAround = 2;
+       //  angTurn_lookAround = angTurn_lookAround / (timer_lookAround + 1);
+     }
+     else if ( maptype == 0 ){
+        safeDist_ratio = 0.0884062;
+        dodge_dist_totune = 0.3f * clamp<double>(0.832334,0.0,1.0);
+        //  cur_constVarStruct.dodge_dist_totune = 1.0f * clamp<double>(0.715608,0.0,1.0);
+        cur_distToMove_ratio = 0.960318;
+        time_ToMove_ratio = 0.247781;
+        cur_distToMove_goto_ratio = 0.370962;
+        time_ToMove_goto_ratio = 0.308037;
+        cur_distToMove_target_ratio = 0.544328;
+        time_ToMove_target_ratio = 0.164879;
+        // angTurn_targetFinding = 360.0f / 180.0f * M_PI * clamp<double>(0.22922,0.0,1.0);
+        angTurn_targetFinding = 120.0f / 180.0f * M_PI * clamp<double>(0.303878,0.0,1.0);
+        time_ToTurn_ratio = 0.258119;
+        angTurn_lookAround = 360.0f / 180.0f * M_PI * clamp<double>(0.889263,0.0,1.0);
+        if ( angTurn_lookAround <= 120.0f / 180.0f * M_PI )
+            timer_lookAround = 0;
+        else if ( angTurn_lookAround > 120.0f / 180.0f * M_PI && angTurn_lookAround <= 240.0f / 180.0f * M_PI )
+            timer_lookAround = 1;
+        else
+            timer_lookAround = 2;
+        angTurn_lookAround = angTurn_lookAround / (timer_lookAround + 1);
+    }
  
      // Takeoff flags
      bool hasTakeoff = false;

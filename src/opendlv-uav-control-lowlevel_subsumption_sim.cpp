@@ -283,25 +283,53 @@ int32_t main(int32_t argc, char **argv) {
     // Best fitness until now=>0.00966(0.610482, 0.290444(this is clamp with 1.0 * clamp...), 0.299552, 0.380354, 0.903012, 0.71108, 0.729205, 0.800282, 0.253018, 0.913777, 0.391905, 0.81762)
     // 0.00931262 (0.341499, 0.715608, 0.857911, 0.240129, 0.793526, 0.645228, 0.7371, 0.715185, 0.303878, 0.83811, 0.41183, 0.129048)
     // 0.00838137 (0.338989, 0.834744, 0.918476, 0.865267, 0.745495, 0.291733, 0.627632, 0.248537, 0.9941, 0.712392, 0.362019, 0.757981)
-    cur_constVarStruct.safeDist_ratio = 0.341499;
-    cur_constVarStruct.dodge_dist_totune = 0.3f * clamp<double>(0.715608,0.0,1.0);
-    //  cur_constVarStruct.dodge_dist_totune = 1.0f * clamp<double>(0.715608,0.0,1.0);
-    cur_constVarStruct.cur_distToMove_ratio = 0.857911;
-    cur_constVarStruct.time_ToMove_ratio = 0.240129;
-    cur_constVarStruct.cur_distToMove_goto_ratio = 0.793526;
-    cur_constVarStruct.time_ToMove_goto_ratio = 0.645228;
-    cur_constVarStruct.cur_distToMove_target_ratio = 0.7371;
-    cur_constVarStruct.time_ToMove_target_ratio = 0.715185;
-    cur_constVarStruct.angTurn_targetFinding = 360.0f / 180.0f * M_PI * clamp<double>(0.303878,0.0,1.0);
-    //  cur_constVarStruct.angTurn_targetFinding = 120.0f / 180.0f * M_PI * clamp<double>(0.303878,0.0,1.0);
-    cur_constVarStruct.time_ToTurn_ratio = 0.83811;
-    cur_constVarStruct.angTurn_lookAround = 360.0f / 180.0f * M_PI * clamp<double>(0.41183,0.0,1.0);
-    if ( cur_constVarStruct.angTurn_lookAround <= 120.0f / 180.0f * M_PI )
-        cur_constVarStruct.timer_lookAround = 0;
-    else if ( cur_constVarStruct.angTurn_lookAround > 120.0f / 180.0f * M_PI && cur_constVarStruct.angTurn_lookAround <= 240.0f / 180.0f * M_PI )
-        cur_constVarStruct.timer_lookAround = 1;
-    else
-        cur_constVarStruct.timer_lookAround = 2;
+     // Rooms fitness:
+     // Best fitness until now=>(36.7 sec)0.0157917 (0.0884062, 0.832334, 0.960318, 0.247781, 0.148714, 0.308037, 0.544328, 0.164879, 0.22922, 0.258119, 0.889263, 0.882657)
+     // 0.0140153 (0.0107241, 0.321034, 0.157157, 0.59527, 0.370962, 0.0190635, 0.466485, 0.940148, 0.149737, 0.661322, 0.767432, 0.0239002)
+    if ( maptype == 1 ){
+        cur_constVarStruct.safeDist_ratio = 0.341499;
+        cur_constVarStruct.dodge_dist_totune = 0.3f * clamp<double>(0.715608,0.0,1.0);
+        //  cur_constVarStruct.dodge_dist_totune = 1.0f * clamp<double>(0.715608,0.0,1.0);
+        cur_constVarStruct.cur_distToMove_ratio = 0.857911;
+        cur_constVarStruct.time_ToMove_ratio = 0.240129;
+        cur_constVarStruct.cur_distToMove_goto_ratio = 0.793526;
+        cur_constVarStruct.time_ToMove_goto_ratio = 0.645228;
+        cur_constVarStruct.cur_distToMove_target_ratio = 0.7371;
+        cur_constVarStruct.time_ToMove_target_ratio = 0.715185;
+        cur_constVarStruct.angTurn_targetFinding = 360.0f / 180.0f * M_PI * clamp<double>(0.303878,0.0,1.0);
+        //  cur_constVarStruct.angTurn_targetFinding = 120.0f / 180.0f * M_PI * clamp<double>(0.303878,0.0,1.0);
+        cur_constVarStruct.time_ToTurn_ratio = 0.83811;
+        cur_constVarStruct.angTurn_lookAround = 360.0f / 180.0f * M_PI * clamp<double>(0.41183,0.0,1.0);
+        if ( cur_constVarStruct.angTurn_lookAround <= 120.0f / 180.0f * M_PI )
+            cur_constVarStruct.timer_lookAround = 0;
+        else if ( cur_constVarStruct.angTurn_lookAround > 120.0f / 180.0f * M_PI && cur_constVarStruct.angTurn_lookAround <= 240.0f / 180.0f * M_PI )
+            cur_constVarStruct.timer_lookAround = 1;
+        else
+            cur_constVarStruct.timer_lookAround = 2;
+    }
+    else if ( maptype == 0 ){
+        cur_constVarStruct.safeDist_ratio = 0.0884062;
+        cur_constVarStruct.dodge_dist_totune = 0.3f * clamp<double>(0.832334,0.0,1.0);
+        //  cur_constVarStruct.dodge_dist_totune = 1.0f * clamp<double>(0.715608,0.0,1.0);
+        cur_constVarStruct.cur_distToMove_ratio = 0.960318;
+        cur_constVarStruct.time_ToMove_ratio = 0.247781;
+        cur_constVarStruct.cur_distToMove_goto_ratio = 0.370962;
+        cur_constVarStruct.time_ToMove_goto_ratio = 0.308037;
+        cur_constVarStruct.cur_distToMove_target_ratio = 0.544328;
+        cur_constVarStruct.time_ToMove_target_ratio = 0.164879;
+        // cur_constVarStruct.angTurn_targetFinding = 360.0f / 180.0f * M_PI * clamp<double>(0.22922,0.0,1.0);
+        cur_constVarStruct.angTurn_targetFinding = 120.0f / 180.0f * M_PI * clamp<double>(0.303878,0.0,1.0);
+        cur_constVarStruct.time_ToTurn_ratio = 0.258119;
+        cur_constVarStruct.angTurn_lookAround = 360.0f / 180.0f * M_PI * clamp<double>(0.889263,0.0,1.0);
+        if ( cur_constVarStruct.angTurn_lookAround <= 120.0f / 180.0f * M_PI )
+            cur_constVarStruct.timer_lookAround = 0;
+        else if ( cur_constVarStruct.angTurn_lookAround > 120.0f / 180.0f * M_PI && cur_constVarStruct.angTurn_lookAround <= 240.0f / 180.0f * M_PI )
+            cur_constVarStruct.timer_lookAround = 1;
+        else
+            cur_constVarStruct.timer_lookAround = 2;
+        cur_constVarStruct.angTurn_lookAround = cur_constVarStruct.angTurn_lookAround / (cur_constVarStruct.timer_lookAround + 1);
+    }
+    
 
     // Variables for suppressing
     std::mutex suppressMutex;
@@ -2487,7 +2515,7 @@ int32_t main(int32_t argc, char **argv) {
                     else{
                         // Check the target angle to go to ( the clear path)
                         // Stop the turning action
-                        std::cout <<" Complete turning and start to check..." << std::endl;   
+                        std::cout <<" Complete turning and start to check with vector size: " << angleFrontState_vec.size() << std::endl;   
                         Goto(od4, 0.0f, 0.0f, 0.0f, 0.0f, 0, 1, false);
                         std::this_thread::sleep_for(std::chrono::milliseconds(500));
             
