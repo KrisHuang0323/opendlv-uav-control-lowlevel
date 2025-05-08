@@ -318,7 +318,7 @@ int32_t main(int32_t argc, char **argv) {
         cur_constVarStruct.cur_distToMove_target_ratio = 0.544328;
         cur_constVarStruct.time_ToMove_target_ratio = 0.164879;
         // cur_constVarStruct.angTurn_targetFinding = 360.0f / 180.0f * M_PI * clamp<double>(0.22922,0.0,1.0);
-        cur_constVarStruct.angTurn_targetFinding = 120.0f / 180.0f * M_PI * clamp<double>(0.303878,0.0,1.0);
+        cur_constVarStruct.angTurn_targetFinding = 120.0f / 180.0f * M_PI * clamp<double>(0.22922,0.0,1.0);
         cur_constVarStruct.time_ToTurn_ratio = 0.258119;
         cur_constVarStruct.angTurn_lookAround = 360.0f / 180.0f * M_PI * clamp<double>(0.889263,0.0,1.0);
         if ( cur_constVarStruct.angTurn_lookAround <= 120.0f / 180.0f * M_PI )

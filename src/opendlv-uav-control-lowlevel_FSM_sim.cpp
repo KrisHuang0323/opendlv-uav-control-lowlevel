@@ -312,7 +312,7 @@
         cur_distToMove_target_ratio = 0.544328;
         time_ToMove_target_ratio = 0.164879;
         // angTurn_targetFinding = 360.0f / 180.0f * M_PI * clamp<double>(0.22922,0.0,1.0);
-        angTurn_targetFinding = 120.0f / 180.0f * M_PI * clamp<double>(0.303878,0.0,1.0);
+        angTurn_targetFinding = 120.0f / 180.0f * M_PI * clamp<double>(0.22922,0.0,1.0);
         time_ToTurn_ratio = 0.258119;
         angTurn_lookAround = 360.0f / 180.0f * M_PI * clamp<double>(0.889263,0.0,1.0);
         if ( angTurn_lookAround <= 120.0f / 180.0f * M_PI )
